@@ -1,5 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import mysql.connector
+import bcrypt
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para usar sesiones
@@ -13,6 +14,17 @@ def get_db_connection():
         database='Libreria'
     )
     return conn
+
+def hash_password(password):
+    """Genera un hash de la contraseña"""
+    salt = bcrypt.gensalt()
+    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed_password
+
+def check_password(stored_password, provided_password):
+    """Compara una contraseña ingresada con la almacenada en la base de datos"""
+    return bcrypt.checkpw(provided_password.encode('utf-8'), stored_password.encode('utf-8'))
+
 
 # Página principal con los botones de inicio de sesión y crear cuenta
 @app.route('/')
@@ -31,14 +43,20 @@ def login():
         cursor = conn.cursor()
 
         # Verificar si el usuario existe en la tabla Administradores
-        cursor.execute('SELECT * FROM Administradores WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
+        cursor.execute('SELECT Contrasena FROM Administradores WHERE Usuario = %s', (usuario,))
         user = cursor.fetchone()
 
-        if user:
-            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+        if user and check_password(user[0], contrasena):
+            session['usuario'] = usuario
             cursor.close()
             conn.close()
-            return redirect(url_for('index'))  # Redirigir al área de libros o página principal
+            return redirect(url_for('index'))
+
+        #if user:
+         #   session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+          #  cursor.close()
+           # conn.close()
+            #return redirect(url_for('index'))  # Redirigir al área de libros o página principal
 
         else:
             # Verificar en la tabla Clientes si la contraseña es correcta
@@ -71,14 +89,20 @@ def login_cliente():
         cursor = conn.cursor()
 
         # Verificar si el usuario existe en la tabla Clientes
-        cursor.execute('SELECT * FROM Clientes WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
+        cursor.execute('SELECT Contrasena FROM Administradores WHERE Usuario = %s', (usuario,))
         user = cursor.fetchone()
 
-        if user:
-            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+        if user and check_password(user[0], contrasena):
+            session['usuario'] = usuario
             cursor.close()
             conn.close()
-            return redirect(url_for('index'))  # Redirigir al área de libros o página principal
+            return redirect(url_for('index'))
+
+        #if user:
+        #    session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+         #   cursor.close()
+          #  conn.close()
+           # return redirect(url_for('index'))  # Redirigir al área de libros o página principal
 
         else:
             flash('Credenciales incorrectas, por favor intenta nuevamente.')
@@ -102,7 +126,7 @@ def registrar():
     apellidos = request.form['apellidos']
     email = request.form['email']
     usuario = request.form['usuario']
-    contrasena = request.form['contrasena']
+    contrasena = hash_password(request.form['contrasena']).decode('utf-8')  # Convertimos bytes a string
     calle = request.form['calle']
     colonia = request.form['colonia']
     cp = request.form['cp']
