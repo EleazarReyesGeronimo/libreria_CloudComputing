@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Cuenta Cliente</title>
+</head>
+<body>
+    <h2>Crear cuenta cliente</h2>
+    <form action="{{ url_for('login_cliente') }}" method="POST">
+        <div>
+            <label for="nombre">Nombre:</label>
+            <input type="text" name="nombre" required>
+        </div>
+        <div>
+            <label for="apellidos">Apellidos:</label>
+            <input type="text" name="apellidos" required>
+        </div>
+        <div>
+            <label for="email">Email:</label>
+            <input type="email" name="email" required>
+        </div>
+        <div>
+            <label for="usuario">Usuario:</label>
+            <input type="text" name="usuario" required>
+        </div>
+        <div>
+            <label for="contrasena">Contraseña:</label>
+            <input type="password" name="contrasena" required>
+        </div>
+        <h3>Dirección</h3>
+        <div>
+            <label for="calle">Calle:</label>
+            <input type="text" name="calle" required>
+        </div>
+        <div>
+            <label for="colonia">Colonia:</label>
+            <input type="text" name="colonia" required>
+        </div>
+        <div>
+            <label for="cp">Código Postal:</label>
+            <input type="text" name="cp" required>
+        </div>
+        <div>
+            <label for="num_exterior">Número Exterior:</label>
+            <input type="text" name="num_exterior" required>
+        </div>
+        <div>
+            <label for="num_interior">Número Interior:</label>
+            <input type="text" name="num_interior" required>
+        </div>
+        <div>
+            <label for="num_contacto">Número de Contacto:</label>
+            <input type="text" name="num_contacto" required>
+        </div>
+        <div>
+            <button type="submit">Crear cuenta</button>
+        </div>
+    </form>
+</body>
+</html>

@@ -1,0 +1,99 @@
+from flask import Flask, request, jsonify
+import mysql.connector
+import bcrypt
+
+app = Flask(__name__)
+
+db_config = {
+    "host": "localhost",
+    "user": "root",
+    "password": "root",
+    "database": "Libreria"
+}
+
+def get_db_connection():
+    return mysql.connector.connect(**db_config)
+
+@app.route("/register", methods=["POST"])
+def register():
+    data = request.form
+    usuario = data["new_username"]
+    contrasena = data["new_password"].encode("utf-8")
+    nombre = data["nombre"]
+    apellido = data["apellido"]
+    rol = data["rol"]
+
+    hashed_password = bcrypt.hashpw(contrasena, bcrypt.gensalt())
+
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO Personal_Manage (Usuario, Contrasena, Nombre, Apellido, Rol) 
+            VALUES (%s, %s, %s, %s, %s)
+        """, (usuario, hashed_password, nombre, apellido, rol))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        return jsonify({"message": "Usuario registrado exitosamente"}), 201
+    except mysql.connector.IntegrityError:
+        return jsonify({"error": "El usuario ya existe"}), 400
+
+@app.route("/login", methods=["POST"])
+def login():
+    data = request.form
+    usuario = data["username"]
+    contrasena = data["password"].encode("utf-8")
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Personal_Manage WHERE Usuario = %s", (usuario,))
+    user = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if user and bcrypt.checkpw(contrasena, user["Contrasena"].encode("utf-8")):
+        return jsonify({"message": "Login exitoso", "Nombre": user["Nombre"], "Rol": user["Rol"]}), 200
+    else:
+        return jsonify({"error": "Credenciales incorrectas"}), 401
+
+@app.route("/update", methods=["POST"])
+def update():
+    data = request.form
+    usuario = data["update_username"]
+    nueva_contrasena = data["update_password"].encode("utf-8")
+    hashed_password = bcrypt.hashpw(nueva_contrasena, bcrypt.gensalt())
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE Personal_Manage SET Contrasena = %s WHERE Usuario = %s", (hashed_password, usuario))
+    conn.commit()
+    rows_affected = cursor.rowcount
+    cursor.close()
+    conn.close()
+
+    if rows_affected:
+        return jsonify({"message": "Contraseña actualizada"}), 200
+    else:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+@app.route("/delete", methods=["POST"])
+def delete():
+    data = request.form
+    usuario = data["delete_username"]
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM Personal_Manage WHERE Usuario = %s", (usuario,))
+    conn.commit()
+    rows_affected = cursor.rowcount
+    cursor.close()
+    conn.close()
+
+    if rows_affected:
+        return jsonify({"message": "Usuario eliminado"}), 200
+    else:
+        return jsonify({"error": "Usuario no encontrado"}), 404
+
+if __name__ == '__main__':
+    app.run(debug=True)

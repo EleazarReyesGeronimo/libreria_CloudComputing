@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Página Principal</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h2>Bienvenido a la Librería</h2>
+    <div class="buttons">
+        <a href="/login"><button>Iniciar sesión</button></a>
+        <a href="/crear-cuenta"><button>Crear cuenta</button></a>
+    </div>
+</body>
+</html>

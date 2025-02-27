@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crear Cuenta</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>Crear Cuenta</h2>
+        <form action="{{ url_for('registrar') }}" method="POST">
+            <div>
+                <label for="nombre">Nombre:</label>
+                <input type="text" id="nombre" name="nombre" required>
+            </div>
+            <div>
+                <label for="apellidos">Apellidos:</label>
+                <input type="text" id="apellidos" name="apellidos" required>
+            </div>
+            <div>
+                <label for="email">Email:</label>
+                <input type="email" id="email" name="email" required>
+            </div>
+            <div>
+                <label for="usuario">Usuario:</label>
+                <input type="text" id="usuario" name="usuario" required>
+            </div>
+            <div>
+                <label for="contrasena">Contraseña:</label>
+                <input type="password" id="contrasena" name="contrasena" required>
+            </div>
+            <div>
+                <label for="calle">Calle:</label>
+                <input type="text" id="calle" name="calle" required>
+            </div>
+            <div>
+                <label for="colonia">Colonia:</label>
+                <input type="text" id="colonia" name="colonia" required>
+            </div>
+            <div>
+                <label for="cp">Código Postal:</label>
+                <input type="text" id="cp" name="cp" required>
+            </div>
+            <div>
+                <label for="num_exterior">Número Exterior:</label>
+                <input type="text" id="num_exterior" name="num_exterior" required>
+            </div>
+            <div>
+                <label for="num_interior">Número Interior:</label>
+                <input type="text" id="num_interior" name="num_interior" required>
+            </div>
+            <div>
+                <label for="num_contacto">Número de Contacto:</label>
+                <input type="text" id="num_contacto" name="num_contacto" required>
+            </div>
+            <div>
+                <button type="submit">Crear Cuenta</button>
+            </div>
+        </form>
+        <p>¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Inicia sesión</a></p>
+    </div>
+</body>
+</html>

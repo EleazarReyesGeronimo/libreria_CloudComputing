@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Libros</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+    <h2>Gestión de Libros 📚</h2>
+
+    <form action="{{ url_for('agregar_libro') }}" method="POST">
+        <input type="text" name="nombre" placeholder="Nombre del libro" required>
+        <input type="text" name="editorial" placeholder="Editorial" required>
+        <input type="text" name="edicion" placeholder="Edición">
+        <input type="text" name="estado" placeholder="Estado (Stock/NoStock)" required>
+        <input type="number" name="cantidad" placeholder="Cantidad" required>
+        <button type="submit">Agregar Libro</button>
+    </form>
+
+    <table border="1">
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Editorial</th>
+            <th>Edición</th>
+            <th>Estado</th>
+            <th>Cantidad</th>
+            <th>Acciones</th>
+        </tr>
+        {% for libro in libros %}
+        <tr>
+            <td>{{ libro[0] }}</td>
+            <td>{{ libro[1] }}</td>
+            <td>{{ libro[2] }}</td>
+            <td>{{ libro[3] }}</td>
+            <td>{{ libro[4] }}</td>
+            <td>{{ libro[5] }}</td>
+            <td>
+                <form action="{{ url_for('editar_libro', id=libro[0]) }}" method="POST">
+                    <input type="text" name="nombre" value="{{ libro[1] }}" required>
+                    <input type="text" name="editorial" value="{{ libro[2] }}" required>
+                    <input type="text" name="edicion" value="{{ libro[3] }}">
+                    <input type="text" name="estado" value="{{ libro[4] }}" required>
+                    <input type="number" name="cantidad" value="{{ libro[5] }}" required>
+                    <button type="submit">Actualizar</button>
+                </form>
+                <a href="{{ url_for('eliminar_libro', id=libro[0]) }}"><button>Eliminar</button></a>
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+
+    <a href="{{ url_for('logout') }}"><button>Cerrar sesión</button></a>
+</body>
+</html>
