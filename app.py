@@ -409,5 +409,74 @@ def logout_cliente():
     flash('Has cerrado sesión exitosamente.', 'success')
     return redirect(url_for('home'))
 
+#Ruta para que el usuario pueda editar sus direcciones
+@app.route('/gestion-direcciones', methods=['GET', 'POST'])
+def gestion_direcciones():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        accion = request.form.get('accion')
+
+        if accion == 'agregar':
+            # Agregar una nueva dirección
+            calle = request.form['calle']
+            colonia = request.form['colonia']
+            cp = request.form['cp']
+            num_exterior = request.form['num_exterior']
+            num_interior = request.form['num_interior']
+            num_contacto = request.form['num_contacto']
+
+            cursor.execute("""
+                INSERT INTO Direcciones (Calle, Colonia, CP, NumExterior, NumInterior, NumContacto, idCliente)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, session.get('id_cliente')))
+
+            conn.commit()
+            flash('Dirección agregada exitosamente.', 'success')
+
+        elif accion == 'editar':
+            # Editar una dirección existente
+            direccion_id = request.form['direccion_id']
+            calle = request.form['calle']
+            colonia = request.form['colonia']
+            cp = request.form['cp']
+            num_exterior = request.form['num_exterior']
+            num_interior = request.form['num_interior']
+            num_contacto = request.form['num_contacto']
+
+            cursor.execute("""
+                UPDATE Direcciones 
+                SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
+                WHERE idDirecciones = %s AND idCliente = %s
+            """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, direccion_id, session.get('id_cliente')))
+
+            conn.commit()
+            flash('Dirección actualizada exitosamente.', 'success')
+
+        elif accion == 'eliminar':
+            # Eliminar una dirección
+            direccion_id = request.form['direccion_id']
+            cursor.execute("""
+                DELETE FROM Direcciones 
+                WHERE idDirecciones = %s AND idCliente = %s
+            """, (direccion_id, session.get('id_cliente')))
+            conn.commit()
+            flash('Dirección eliminada exitosamente.', 'success')
+
+    # Obtener todas las direcciones del cliente
+    cursor.execute("""
+        SELECT * FROM Direcciones 
+        WHERE idCliente = %s
+    """, (session.get('id_cliente'),))
+    direcciones = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template('gestion_direcciones.html', direcciones=direcciones)
 if __name__ == '__main__':
     app.run(debug=True)

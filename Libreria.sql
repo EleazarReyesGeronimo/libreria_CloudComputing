@@ -107,7 +107,6 @@ INSERT INTO `Administradores` (Usuario,Contrasena,Nombre,Apellido) VALUES ("btoa
 SELECT * FROM Administradores;
 SELECT * FROM Libro
 SELECT * FROM Clientes
-use libreria
 drop database Libreria
 
 DELIMITER $$
@@ -165,33 +164,3 @@ select * from Libro;
 ALTER TABLE Administradores MODIFY COLUMN Contrasena VARCHAR(60);
 ALTER TABLE Clientes MODIFY COLUMN Contrasena VARCHAR(60);
 
--- Añadir tabla de Reseñas para la calificación de libros
-CREATE TABLE Resenas (
-  idResena INT NOT NULL AUTO_INCREMENT,
-  idLibro INT NOT NULL,
-  idCliente INT NOT NULL,
-  Calificacion INT NOT NULL CHECK (Calificacion >= 1 AND Calificacion <= 5),
-  Comentario TEXT NULL,
-  FechaCreacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (idResena),
-  INDEX fk_Resenas_Libro_idx (idLibro ASC),
-  INDEX fk_Resenas_Cliente_idx (idCliente ASC),
-  CONSTRAINT fk_Resenas_Libro
-    FOREIGN KEY (idLibro)
-    REFERENCES Libro (idLibro)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE,
-  CONSTRAINT fk_Resenas_Cliente
-    FOREIGN KEY (idCliente)
-    REFERENCES Clientes (idClientes)
-    ON DELETE CASCADE
-    ON UPDATE CASCADE
-) ENGINE = InnoDB;
-
--- Añadir campo para fecha de creación del libro (para la etiqueta "Nuevo")
-ALTER TABLE Libro ADD COLUMN FechaCreacion DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP;
-
--- Actualizar registros existentes con una fecha aleatoria en el último mes
-UPDATE Libro SET FechaCreacion = DATE_SUB(NOW(), INTERVAL FLOOR(RAND() * 30) DAY);
-
-select * from clientes
