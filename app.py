@@ -1,6 +1,6 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import mysql.connector
-import bcrypt
+from datetime import datetime, timedelta
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para usar sesiones
@@ -14,17 +14,6 @@ def get_db_connection():
         database='Libreria'
     )
     return conn
-
-def hash_password(password):
-    """Genera un hash de la contraseña"""
-    salt = bcrypt.gensalt()
-    hashed_password = bcrypt.hashpw(password.encode('utf-8'), salt)
-    return hashed_password
-
-def check_password(stored_password, provided_password):
-    """Compara una contraseña ingresada con la almacenada en la base de datos"""
-    return bcrypt.checkpw(provided_password.encode('utf-8'), stored_password.encode('utf-8'))
-
 
 # Página principal con los botones de inicio de sesión y crear cuenta
 @app.route('/')
@@ -43,37 +32,21 @@ def login():
         cursor = conn.cursor()
 
         # Verificar si el usuario existe en la tabla Administradores
-        cursor.execute('SELECT Contrasena FROM Administradores WHERE Usuario = %s', (usuario,))
+        cursor.execute('SELECT * FROM Administradores WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
         user = cursor.fetchone()
 
-        if user and check_password(user[0], contrasena):
-            session['usuario'] = usuario
+        if user:
+            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+            session['tipo_usuario'] = 'admin'  # Identificamos que es un administrador
             cursor.close()
             conn.close()
-            return redirect(url_for('index'))
-
-        #if user:
-         #   session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
-          #  cursor.close()
-           # conn.close()
-            #return redirect(url_for('index'))  # Redirigir al área de libros o página principal
+            return redirect(url_for('index'))  # Redirigir al área de libros o página principal
 
         else:
-            # Verificar en la tabla Clientes si la contraseña es correcta
-            cursor.execute('SELECT * FROM Administradores WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
-            user = cursor.fetchone()
-
-            if user:
-                session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
-                cursor.close()
-                conn.close()
-                return redirect(url_for('index'))  # Redirigir al área de libros o página principal
-
-            else:
-                flash('Credenciales incorrectas, por favor intenta nuevamente.')
-                cursor.close()
-                conn.close()
-                return redirect(url_for('login'))  # Vuelve al login si la autenticación falla
+            flash('Credenciales incorrectas, por favor intenta nuevamente.', 'danger')
+            cursor.close()
+            conn.close()
+            return redirect(url_for('login'))  # Vuelve al login si la autenticación falla
 
     return render_template('login.html')  # Página de login
 
@@ -86,33 +59,28 @@ def login_cliente():
 
         # Conexión a la base de datos
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)  # Usar dictionary=True para obtener resultados como diccionarios
 
         # Verificar si el usuario existe en la tabla Clientes
-        cursor.execute('SELECT Contrasena FROM Administradores WHERE Usuario = %s', (usuario,))
+        cursor.execute('SELECT * FROM Clientes WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
         user = cursor.fetchone()
 
-        if user and check_password(user[0], contrasena):
-            session['usuario'] = usuario
+        if user:
+            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
+            session['id_cliente'] = user['idClientes']  # Guardamos el ID del cliente
+            session['nombre_cliente'] = user['Nombre']  # Guardamos el nombre del cliente
+            session['tipo_usuario'] = 'cliente'  # Identificamos que es un cliente
             cursor.close()
             conn.close()
-            return redirect(url_for('index'))
-
-        #if user:
-        #    session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
-         #   cursor.close()
-          #  conn.close()
-           # return redirect(url_for('index'))  # Redirigir al área de libros o página principal
+            return redirect(url_for('catalogo'))  # Redirigir al catálogo de libros
 
         else:
-            flash('Credenciales incorrectas, por favor intenta nuevamente.')
+            flash('Credenciales incorrectas, por favor intenta nuevamente.', 'danger')
             cursor.close()
             conn.close()
             return redirect(url_for('login_cliente'))  # Vuelve al login si la autenticación falla
 
     return render_template('login_cliente.html')  # Página de login para clientes
-
-
 
 # Página para crear una nueva cuenta
 @app.route('/crear-cuenta')
@@ -126,7 +94,7 @@ def registrar():
     apellidos = request.form['apellidos']
     email = request.form['email']
     usuario = request.form['usuario']
-    contrasena = hash_password(request.form['contrasena']).decode('utf-8')  # Convertimos bytes a string
+    contrasena = request.form['contrasena']
     calle = request.form['calle']
     colonia = request.form['colonia']
     cp = request.form['cp']
@@ -157,8 +125,163 @@ def registrar():
     cursor.close()
     conn.close()
 
-    flash('Cuenta creada exitosamente, ya puedes iniciar sesión.')
-    return redirect(url_for('home'))
+    flash('Cuenta creada exitosamente, ya puedes iniciar sesión.', 'success')
+    return redirect(url_for('login_cliente'))  # Redirigir al login de cliente después de registrar
+
+# Catálogo de libros para clientes
+@app.route('/catalogo')
+def catalogo():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Libro")
+    libros = cursor.fetchall()
+    cursor.close()
+    conn.close()
+
+    return render_template('catalogo_cliente.html', libros=libros)
+
+
+@app.route('/libro/<int:id>')
+def detalle_libro(id):
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    cursor.execute("SELECT * FROM Libro WHERE idLibro = %s", (id,))
+    libro = cursor.fetchone()
+    cursor.close()
+    conn.close()
+
+    if not libro:
+        flash("Libro no encontrado.", "danger")
+        return redirect(url_for('catalogo'))
+
+    return render_template('detalle_libro.html', libro=libro)
+
+
+# Calificar libro
+@app.route('/calificar/<int:id_libro>', methods=['POST'])
+def calificar_libro(id_libro):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    calificacion = int(request.form['calificacion'])
+    comentario = request.form.get('comentario', '')
+    id_cliente = session.get('id_cliente')
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Verificar si el usuario ya ha calificado este libro
+    cursor.execute('SELECT * FROM Resenas WHERE idLibro = %s AND idCliente = %s', 
+                  (id_libro, id_cliente))
+    resena_existente = cursor.fetchone()
+    
+    if resena_existente:
+        # Actualizar la reseña existente
+        cursor.execute('''
+            UPDATE Resenas 
+            SET Calificacion = %s, Comentario = %s, FechaCreacion = NOW() 
+            WHERE idLibro = %s AND idCliente = %s
+        ''', (calificacion, comentario, id_libro, id_cliente))
+        flash('Has actualizado tu reseña exitosamente.', 'success')
+    else:
+        # Crear una nueva reseña
+        cursor.execute('''
+            INSERT INTO Resenas (idLibro, idCliente, Calificacion, Comentario) 
+            VALUES (%s, %s, %s, %s)
+        ''', (id_libro, id_cliente, calificacion, comentario))
+        flash('Has calificado el libro exitosamente.', 'success')
+    
+    conn.commit()
+    cursor.close()
+    conn.close()
+    
+    return redirect(url_for('detalle_libro', id=id_libro))
+
+# Perfil del cliente
+@app.route('/perfil')
+def perfil_cliente():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Obtener información del cliente y su dirección
+    cursor.execute('''
+        SELECT c.*, d.* 
+        FROM Clientes c 
+        JOIN Direcciones d ON c.IDireccion = d.idDirecciones 
+        WHERE c.idClientes = %s
+    ''', (session.get('id_cliente'),))
+    
+    cliente = cursor.fetchone()
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template('perfil_cliente.html', cliente=cliente)
+
+# Actualizar perfil del cliente
+@app.route('/actualizar-perfil', methods=['POST'])
+def actualizar_perfil():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    # Datos del cliente
+    nombre = request.form['nombre']
+    apellidos = request.form['apellidos']
+    email = request.form['email']
+    usuario = request.form['usuario']
+    
+    # Datos de dirección
+    calle = request.form['calle']
+    colonia = request.form['colonia']
+    cp = request.form['cp']
+    num_exterior = request.form['num_exterior']
+    num_interior = request.form['num_interior']
+    num_contacto = request.form['num_contacto']
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Obtener el ID de la dirección del cliente
+    cursor.execute('SELECT IDireccion FROM Clientes WHERE idClientes = %s', (session.get('id_cliente'),))
+    id_direccion = cursor.fetchone()['IDireccion']
+    
+    # Actualizar la dirección
+    cursor.execute('''
+        UPDATE Direcciones 
+        SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s 
+        WHERE idDirecciones = %s
+    ''', (calle, colonia, cp, num_exterior, num_interior, num_contacto, id_direccion))
+    
+    # Actualizar datos del cliente
+    cursor.execute('''
+        UPDATE Clientes 
+        SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s 
+        WHERE idClientes = %s
+    ''', (nombre, apellidos, email, usuario, session.get('id_cliente')))
+    
+    # Si se proporciona una nueva contraseña, actualizarla
+    if 'contrasena' in request.form and request.form['contrasena'].strip():
+        cursor.execute('UPDATE Clientes SET Contrasena = %s WHERE idClientes = %s', 
+                      (request.form['contrasena'], session.get('id_cliente')))
+    
+    conn.commit()
+    
+    # Actualizar nombre de usuario en la sesión si cambió
+    if session['usuario'] != usuario:
+        session['usuario'] = usuario
+        session['nombre_cliente'] = nombre
+    
+    cursor.close()
+    conn.close()
+    
+    flash('Perfil actualizado exitosamente.', 'success')
+    return redirect(url_for('perfil_cliente'))
 
 # Página para gestionar los libros (CRUD)
 @app.route('/index')
@@ -182,7 +305,7 @@ def index():
 # Ruta para agregar un nuevo libro
 @app.route('/agregar-libro', methods=['POST'])
 def agregar_libro():
-    if 'usuario' not in session:
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
         return redirect(url_for('login'))
 
     nombre = request.form['nombre']
@@ -195,23 +318,23 @@ def agregar_libro():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Insertar el nuevo libro
+    # Insertar el nuevo libro con fecha actual
     cursor.execute("""
-        INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad)
-        VALUES (%s, %s, %s, %s, %s)
+        INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion)
+        VALUES (%s, %s, %s, %s, %s, NOW())
     """, (nombre, editorial, edicion, estado, cantidad))
 
     conn.commit()
     cursor.close()
     conn.close()
 
-    flash('Libro agregado exitosamente.')
+    flash('Libro agregado exitosamente.', 'success')
     return redirect(url_for('index'))
 
 # Ruta para editar un libro
 @app.route('/editar-libro/<int:id>', methods=['GET', 'POST'])
 def editar_libro(id):
-    if 'usuario' not in session:
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
         return redirect(url_for('login'))
 
     conn = get_db_connection()
@@ -235,7 +358,7 @@ def editar_libro(id):
         cursor.close()
         conn.close()
 
-        flash('Libro actualizado exitosamente.')
+        flash('Libro actualizado exitosamente.', 'success')
         return redirect(url_for('index'))
 
     # Obtener los datos del libro a editar
@@ -250,7 +373,7 @@ def editar_libro(id):
 # Ruta para eliminar un libro
 @app.route('/eliminar-libro/<int:id>', methods=['GET'])
 def eliminar_libro(id):
-    if 'usuario' not in session:
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
         return redirect(url_for('login'))
 
     conn = get_db_connection()
@@ -263,14 +386,27 @@ def eliminar_libro(id):
     cursor.close()
     conn.close()
 
-    flash('Libro eliminado exitosamente.')
+    flash('Libro eliminado exitosamente.', 'success')
     return redirect(url_for('index'))
 
 # Ruta para cerrar sesión
 @app.route('/logout')
 def logout():
     session.pop('usuario', None)
-    flash('Has cerrado sesión exitosamente.')
+    session.pop('tipo_usuario', None)
+    session.pop('id_cliente', None)
+    session.pop('nombre_cliente', None)
+    flash('Has cerrado sesión exitosamente.', 'success')
+    return redirect(url_for('home'))
+
+# Ruta para cerrar sesión de cliente
+@app.route('/logout_cliente')
+def logout_cliente():
+    session.pop('usuario', None)
+    session.pop('tipo_usuario', None)
+    session.pop('id_cliente', None)
+    session.pop('nombre_cliente', None)
+    flash('Has cerrado sesión exitosamente.', 'success')
     return redirect(url_for('home'))
 
 if __name__ == '__main__':
