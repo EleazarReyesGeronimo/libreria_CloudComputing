@@ -1,9 +1,20 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 import mysql.connector
 from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
+import os
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para usar sesiones
+
+UPLOAD_FOLDER = 'static/images'  # Carpeta donde se guardarán las imágenes
+ALLOWED_EXTENSIONS = {'jpg', 'jpeg'}  # Extensiones permitidas
+
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Función para verificar la extensión del archivo
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 # Configura tu conexión a la base de datos
 def get_db_connection():
@@ -128,7 +139,7 @@ def registrar():
     flash('Cuenta creada exitosamente, ya puedes iniciar sesión.', 'success')
     return redirect(url_for('login_cliente'))  # Redirigir al login de cliente después de registrar
 
-# Catálogo de libros para clientes
+# Ruta para mostrar el catálogo de libros
 @app.route('/catalogo')
 def catalogo():
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
@@ -136,14 +147,24 @@ def catalogo():
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM Libro")
+
+    # Obtener todos los libros
+    cursor.execute("SELECT idLibro, Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion, Imagen, EstadoNuevo, FechaLimiteNuevo FROM Libro")
     libros = cursor.fetchall()
+
+    # Verificar si el libro es "nuevo" basado en la fecha límite
+    fecha_actual = datetime.now()
+    for libro in libros:
+        if libro['FechaLimiteNuevo']:
+            libro['es_nuevo'] = fecha_actual <= libro['FechaLimiteNuevo']
+        else:
+            libro['es_nuevo'] = False
+
     cursor.close()
     conn.close()
 
     return render_template('catalogo_cliente.html', libros=libros)
-
-
+# Detalle de un libro
 @app.route('/libro/<int:id>')
 def detalle_libro(id):
     conn = get_db_connection()
@@ -158,7 +179,6 @@ def detalle_libro(id):
         return redirect(url_for('catalogo'))
 
     return render_template('detalle_libro.html', libro=libro)
-
 
 # Calificar libro
 @app.route('/calificar/<int:id_libro>', methods=['POST'])
@@ -302,7 +322,7 @@ def index():
 
     return render_template('index.html', libros=libros)
 
-# Ruta para agregar un nuevo libro
+# Ruta para agregar un libro
 @app.route('/agregar-libro', methods=['POST'])
 def agregar_libro():
     if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
@@ -314,21 +334,47 @@ def agregar_libro():
     estado = request.form['estado']
     cantidad = request.form['cantidad']
 
-    # Conexión a la base de datos
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    # Procesar la imagen
+    if 'imagen' not in request.files:
+        flash('No se ha seleccionado una imagen.', 'danger')
+        return redirect(url_for('index'))
 
-    # Insertar el nuevo libro con fecha actual
-    cursor.execute("""
-        INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion)
-        VALUES (%s, %s, %s, %s, %s, NOW())
-    """, (nombre, editorial, edicion, estado, cantidad))
+    imagen = request.files['imagen']
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+    if imagen.filename == '':
+        flash('No se ha seleccionado una imagen.', 'danger')
+        return redirect(url_for('index'))
 
-    flash('Libro agregado exitosamente.', 'success')
+    if imagen and allowed_file(imagen.filename):
+        # Guardar la imagen en la carpeta static/images
+        filename = secure_filename(imagen.filename)
+        imagen.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+
+        # Guardar la ruta de la imagen en la base de datos
+        ruta_imagen = os.path.join('images', filename)
+
+        # Calcular la fecha límite para el label "Nuevo" (30 días después de la fecha actual)
+        fecha_actual = datetime.now()
+        fecha_limite_nuevo = fecha_actual + timedelta(days=30)
+
+        # Conexión a la base de datos
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Insertar el nuevo libro con la ruta de la imagen y la fecha límite
+        cursor.execute("""
+            INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion, Imagen, EstadoNuevo, FechaLimiteNuevo)
+            VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s)
+        """, (nombre, editorial, edicion, estado, cantidad, ruta_imagen, True, fecha_limite_nuevo))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash('Libro agregado exitosamente.', 'success')
+    else:
+        flash('Formato de imagen no válido. Solo se permiten archivos JPG.', 'danger')
+
     return redirect(url_for('index'))
 
 # Ruta para editar un libro
@@ -409,7 +455,7 @@ def logout_cliente():
     flash('Has cerrado sesión exitosamente.', 'success')
     return redirect(url_for('home'))
 
-#Ruta para que el usuario pueda editar sus direcciones
+# Ruta para gestionar direcciones
 @app.route('/gestion-direcciones', methods=['GET', 'POST'])
 def gestion_direcciones():
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
@@ -438,25 +484,6 @@ def gestion_direcciones():
             conn.commit()
             flash('Dirección agregada exitosamente.', 'success')
 
-        elif accion == 'editar':
-            # Editar una dirección existente
-            direccion_id = request.form['direccion_id']
-            calle = request.form['calle']
-            colonia = request.form['colonia']
-            cp = request.form['cp']
-            num_exterior = request.form['num_exterior']
-            num_interior = request.form['num_interior']
-            num_contacto = request.form['num_contacto']
-
-            cursor.execute("""
-                UPDATE Direcciones 
-                SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
-                WHERE idDirecciones = %s AND idCliente = %s
-            """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, direccion_id, session.get('id_cliente')))
-
-            conn.commit()
-            flash('Dirección actualizada exitosamente.', 'success')
-
         elif accion == 'eliminar':
             # Eliminar una dirección
             direccion_id = request.form['direccion_id']
@@ -478,5 +505,53 @@ def gestion_direcciones():
     conn.close()
 
     return render_template('gestion_direcciones.html', direcciones=direcciones)
+
+# Ruta para editar una dirección
+@app.route('/editar-direccion/<int:id>', methods=['GET', 'POST'])
+def editar_direccion(id):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        # Procesar el formulario de edición
+        calle = request.form['calle']
+        colonia = request.form['colonia']
+        cp = request.form['cp']
+        num_exterior = request.form['num_exterior']
+        num_interior = request.form['num_interior']
+        num_contacto = request.form['num_contacto']
+
+        cursor.execute("""
+            UPDATE Direcciones 
+            SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
+            WHERE idDirecciones = %s AND idCliente = %s
+        """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, id, session.get('id_cliente')))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        flash('Dirección actualizada exitosamente.', 'success')
+        return redirect(url_for('gestion_direcciones'))
+
+    # Obtener la dirección a editar
+    cursor.execute("""
+        SELECT * FROM Direcciones 
+        WHERE idDirecciones = %s AND idCliente = %s
+    """, (id, session.get('id_cliente')))
+    direccion = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    if not direccion:
+        flash('Dirección no encontrada.', 'danger')
+        return redirect(url_for('gestion_direcciones'))
+
+    return render_template('editar_direccion.html', direccion=direccion)
+
 if __name__ == '__main__':
     app.run(debug=True)

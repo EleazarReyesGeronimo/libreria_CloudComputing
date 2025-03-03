@@ -170,7 +170,7 @@
                             <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Agregar Nuevo Libro</h5>
                         </div>
                         <div class="card-body">
-                            <form action="{{ url_for('agregar_libro') }}" method="POST" class="row g-3">
+                            <form action="{{ url_for('agregar_libro') }}" method="POST" enctype="multipart/form-data" class="row g-3">
                                 <div class="col-md-4">
                                     <div class="form-floating">
                                         <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Nombre del libro" required>
@@ -202,6 +202,13 @@
                                     <div class="form-floating">
                                         <input type="number" class="form-control" id="cantidad" name="cantidad" placeholder="Cantidad" required min="0">
                                         <label for="cantidad">Cant.</label>
+                                    </div>
+                                </div>
+                                <!-- Campo para subir la imagen -->
+                                <div class="col-md-4">
+                                    <div class="form-floating">
+                                        <input type="file" class="form-control" id="imagen" name="imagen" accept=".jpg, .jpeg" required>
+                                        <label for="imagen">Imagen (formato JPG)</label>
                                     </div>
                                 </div>
                                 <div class="col-12 text-end">
