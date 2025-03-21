@@ -4,102 +4,241 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Crear Cuenta</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <style>
+        :root {
+            --primary-color: #512B1D;
+            --secondary-color: #8C7051;
+            --accent-color: #DCC7AA;
+            --text-color: #2F1B0C;
+            --light-color: #F5EEE4;
+            --shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Georgia', serif;
+        }
+        
         body {
-            background-color: #f8f9fa;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-image: url('https://images.unsplash.com/photo-1507842217343-583bb7270b66?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80');
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+            padding: 40px 0;
         }
+        
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(45, 28, 14, 0.7);
+            z-index: 1;
+        }
+        
         .container {
-            max-width: 600px;
-            margin-top: 50px;
+            width: 90%;
+            max-width: 700px;
+            background-color: var(--light-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            padding: 40px;
+            position: relative;
+            z-index: 2;
+            border-left: 6px solid var(--primary-color);
         }
-        .form-group {
-            margin-bottom: 15px;
+        
+        h2 {
+            color: var(--primary-color);
+            margin-bottom: 30px;
+            text-align: center;
+            font-size: 28px;
+            font-weight: normal;
+            border-bottom: 2px solid var(--accent-color);
+            padding-bottom: 15px;
+            letter-spacing: 1px;
+            position: relative;
         }
-        .form-group label {
+        
+        h2::before {
+            content: "📚";
+            position: absolute;
+            top: -30px;
+            left: 20px;
+            font-size: 40px;
+            z-index: 3;
+        }
+        
+        form {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+        
+        form div {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            margin-bottom: 8px;
+            color: var(--text-color);
             font-weight: bold;
+            font-size: 15px;
         }
-        .btn-primary {
-            background-color: #3498db;
-            border-color: #3498db;
+        
+        input {
+            padding: 12px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            background-color: #fff;
+            transition: border-color 0.3s, box-shadow 0.3s;
+            font-size: 15px;
         }
-        .btn-primary:hover {
-            background-color: #2980b9;
-            border-color: #2980b9;
+        
+        input:focus {
+            outline: none;
+            border-color: var(--secondary-color);
+            box-shadow: 0 0 0 3px rgba(140, 112, 81, 0.2);
+        }
+        
+        form div:last-child {
+            grid-column: span 2;
+            margin-top: 10px;
+        }
+        
+        button {
+            width: 100%;
+            padding: 14px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+            letter-spacing: 0.5px;
+        }
+        
+        button:hover {
+            background-color: #3A1F14;
+        }
+        
+        p {
+            margin-top: 30px;
+            text-align: center;
+            color: var(--text-color);
+            font-size: 15px;
+        }
+        
+        a {
+            color: var(--primary-color);
+            text-decoration: none;
+            font-weight: bold;
+            transition: color 0.3s;
+        }
+        
+        a:hover {
+            color: var(--secondary-color);
+            text-decoration: underline;
+        }
+        
+        /* Decoración extra */
+        .container::after {
+            content: "";
+            position: absolute;
+            bottom: -10px;
+            right: -10px;
+            width: 100px;
+            height: 30px;
+            background-image: 
+                linear-gradient(90deg, var(--secondary-color) 10px, transparent 10px),
+                linear-gradient(90deg, var(--accent-color) 20px, transparent 20px),
+                linear-gradient(90deg, var(--primary-color) 30px, transparent 30px);
+            background-size: 40px 30px;
+            background-repeat: repeat-x;
+            z-index: -1;
+            transform: rotate(-3deg);
+        }
+        
+        @media (max-width: 768px) {
+            form {
+                grid-template-columns: 1fr;
+            }
+            
+            form div:last-child {
+                grid-column: span 1;
+            }
+            
+            .container {
+                padding: 30px 20px;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h2 class="text-center mb-4">Crear Cuenta</h2>
-        
-        <!-- Mostrar mensajes flash -->
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-                        {{ message }}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
-
+        <h2>Crear Cuenta</h2>
         <form action="{{ url_for('registrar') }}" method="POST">
-            <div class="form-group">
+            <div>
                 <label for="nombre">Nombre:</label>
-                <input type="text" id="nombre" name="nombre" class="form-control" required>
+                <input type="text" id="nombre" name="nombre" required placeholder="Tu nombre">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="apellidos">Apellidos:</label>
-                <input type="text" id="apellidos" name="apellidos" class="form-control" required>
+                <input type="text" id="apellidos" name="apellidos" required placeholder="Tus apellidos">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="email">Email:</label>
-                <input type="email" id="email" name="email" class="form-control" required>
+                <input type="email" id="email" name="email" required placeholder="tu@correo.com">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="usuario">Usuario:</label>
-                <input type="text" id="usuario" name="usuario" class="form-control" required>
+                <input type="text" id="usuario" name="usuario" required placeholder="Nombre de usuario">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="contrasena">Contraseña:</label>
-                <input type="password" id="contrasena" name="contrasena" class="form-control" required>
+                <input type="password" id="contrasena" name="contrasena" required placeholder="Contraseña segura">
             </div>
-            <h3 class="mt-4">Dirección</h3>
-            <div class="form-group">
+            <div>
                 <label for="calle">Calle:</label>
-                <input type="text" id="calle" name="calle" class="form-control" required>
+                <input type="text" id="calle" name="calle" required placeholder="Nombre de la calle">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="colonia">Colonia:</label>
-                <input type="text" id="colonia" name="colonia" class="form-control" required>
+                <input type="text" id="colonia" name="colonia" required placeholder="Tu colonia">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="cp">Código Postal:</label>
-                <input type="text" id="cp" name="cp" class="form-control" required>
+                <input type="text" id="cp" name="cp" required placeholder="12345">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="num_exterior">Número Exterior:</label>
-                <input type="text" id="num_exterior" name="num_exterior" class="form-control" required>
+                <input type="text" id="num_exterior" name="num_exterior" required placeholder="123">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="num_interior">Número Interior:</label>
-                <input type="text" id="num_interior" name="num_interior" class="form-control" required>
+                <input type="text" id="num_interior" name="num_interior" placeholder="Opcional">
             </div>
-            <div class="form-group">
+            <div>
                 <label for="num_contacto">Número de Contacto:</label>
-                <input type="text" id="num_contacto" name="num_contacto" class="form-control" required>
+                <input type="text" id="num_contacto" name="num_contacto" required placeholder="Tu teléfono">
             </div>
-            <div class="form-group">
-                <button type="submit" class="btn btn-primary w-100">Crear Cuenta</button>
+            <div>
+                <button type="submit">Crear Cuenta</button>
             </div>
         </form>
-        <p class="text-center mt-3">¿Ya tienes cuenta? <a href="{{ url_for('login_cliente') }}">Inicia sesión</a></p>
+        <p>¿Ya tienes cuenta? <a href="{{ url_for('login_cliente') }}">Inicia sesión</a></p>
     </div>
-
-    <!-- Bootstrap JS Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

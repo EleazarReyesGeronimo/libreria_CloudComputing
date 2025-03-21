@@ -33,11 +33,11 @@ end
 # Unset irrelevant variables.
 deactivate nondestructive
 
-set -gx VIRTUAL_ENV 'C:\Users\CA2-Enero\Desktop\flaskprueba'
+set -gx VIRTUAL_ENV 'C:\Users\Win10\Desktop\Proyecto\integradora'
 
 set -gx _OLD_VIRTUAL_PATH $PATH
 set -gx PATH "$VIRTUAL_ENV/"Scripts $PATH
-set -gx VIRTUAL_ENV_PROMPT flaskprueba
+set -gx VIRTUAL_ENV_PROMPT integradora
 
 # Unset PYTHONHOME if set.
 if set -q PYTHONHOME
@@ -57,7 +57,7 @@ if test -z "$VIRTUAL_ENV_DISABLE_PROMPT"
         set -l old_status $status
 
         # Output the venv prompt; color taken from the blue of the Python logo.
-        printf "%s(%s)%s " (set_color 4B8BBE) flaskprueba (set_color normal)
+        printf "%s(%s)%s " (set_color 4B8BBE) integradora (set_color normal)
 
         # Restore the return status of the previous command.
         echo "exit $old_status" | .

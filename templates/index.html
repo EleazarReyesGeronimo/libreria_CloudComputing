@@ -10,26 +10,46 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
-            --primary-color: #3498db;
-            --secondary-color: #2980b9;
-            --accent-color: #f39c12;
-            --light-color: #ecf0f1;
-            --dark-color: #2c3e50;
+            --primary-color: #8b4513;       /* Marrón como madera */
+            --secondary-color: #654321;     /* Marrón más oscuro */
+            --accent-color: #c19a6b;        /* Beige como papel antiguo */
+            --light-color: #f5f5dc;         /* Beige claro como páginas de libro */
+            --dark-color: #2c2416;          /* Marrón muy oscuro */
+            --text-color: #4a3c2a;          /* Color texto café oscuro */
         }
         
         body {
             background-color: var(--light-color);
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
             padding-top: 20px;
             padding-bottom: 40px;
+            background-image: url('https://cdnjs.cloudflare.com/ajax/libs/ant-design-icons/4.7.0/png/outline/book.png'), linear-gradient(rgba(245, 245, 220, 0.7), rgba(245, 245, 220, 0.9));
+            background-position: center;
+            background-repeat: repeat;
+            background-blend-mode: overlay;
         }
         
         .main-container {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+            background-color: #fffaf0;
+            border-radius: 5px;
+            box-shadow: 0 5px 15px rgba(139, 69, 19, 0.3);
             padding: 20px;
             margin-bottom: 20px;
+            border: 1px solid var(--accent-color);
+            position: relative;
+        }
+        
+        .main-container::before {
+            content: "";
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 1px solid var(--accent-color);
+            opacity: 0.5;
+            pointer-events: none;
+            z-index: 0;
         }
         
         .page-header {
@@ -37,65 +57,95 @@
             margin-bottom: 25px;
             padding-bottom: 10px;
             color: var(--dark-color);
+            position: relative;
+            z-index: 1;
         }
         
         .page-header h2 {
             display: flex;
             align-items: center;
             gap: 10px;
+            font-family: 'Bookman Old Style', Georgia, serif;
+            color: var(--primary-color);
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
         }
         
         .btn-primary {
             background-color: var(--primary-color);
             border-color: var(--primary-color);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
         
         .btn-primary:hover {
             background-color: var(--secondary-color);
             border-color: var(--secondary-color);
+            transform: translateY(-2px);
         }
         
         .btn-warning {
             background-color: var(--accent-color);
             border-color: var(--accent-color);
+            color: var(--dark-color);
+        }
+        
+        .btn-warning:hover {
+            background-color: #d2ad81;
+            border-color: #d2ad81;
+            transform: translateY(-2px);
         }
         
         .table {
-            background-color: white;
+            background-color: #fffaf0;
             border-radius: 8px;
             overflow: hidden;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 0 10px rgba(139, 69, 19, 0.2);
+            position: relative;
+            z-index: 1;
         }
         
         .table th {
             background-color: var(--primary-color);
-            color: white;
+            color: #fffaf0;
+            font-family: 'Bookman Old Style', Georgia, serif;
+            font-weight: normal;
         }
         
         .table-striped tbody tr:nth-of-type(odd) {
-            background-color: rgba(52, 152, 219, 0.05);
+            background-color: rgba(193, 154, 107, 0.1);
         }
         
         .book-form {
-            background-color: white;
+            background-color: #fffaf0;
             border-radius: 8px;
             padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.05);
+            box-shadow: 0 0 10px rgba(139, 69, 19, 0.2);
+            border: 1px solid var(--accent-color);
+            position: relative;
+            z-index: 1;
         }
         
         .form-floating {
             margin-bottom: 15px;
         }
         
+        .form-floating input, 
+        .form-floating select {
+            background-color: #fffef7;
+            border-color: var(--accent-color);
+        }
+        
         .logout-btn {
             margin-top: 20px;
+            position: relative;
+            z-index: 1;
         }
         
         .edit-form {
             margin-top: 10px;
             padding: 10px;
             border-radius: 8px;
-            background-color: #f8f9fa;
+            background-color: #fffef7;
+            border: 1px dashed var(--accent-color);
         }
         
         .btn-action {
@@ -123,23 +173,49 @@
         }
 
         .status-stock {
-            background-color: #2ecc71;
+            background-color: #6b8e23;
             color: white;
         }
 
         .status-nostock {
-            background-color: #e74c3c;
+            background-color: #8b0000;
             color: white;
         }
 
         /* Animaciones suaves */
         .table-hover tbody tr:hover {
-            background-color: rgba(52, 152, 219, 0.1);
+            background-color: rgba(193, 154, 107, 0.2);
             transition: background-color 0.3s ease;
         }
 
         .btn {
             transition: all 0.3s ease;
+        }
+        
+        .card-header {
+            background-color: var(--primary-color) !important;
+            color: white;
+            font-family: 'Bookman Old Style', Georgia, serif;
+            border-bottom: 1px solid var(--secondary-color);
+        }
+        
+        .alert-success {
+            background-color: rgba(107, 142, 35, 0.2);
+            border-color: #6b8e23;
+            color: #4a5d1e;
+        }
+        
+        /* Decoración extra */
+        .card-header h5 {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .card-header h5::after {
+            content: "📖";
+            font-size: 1.2rem;
+            margin-left: auto;
         }
     </style>
 </head>
@@ -147,7 +223,7 @@
     <div class="container">
         <div class="main-container">
             <div class="page-header">
-                <h2><i class="fas fa-book"></i> Gestión de Libros</h2>
+                <h2><i class="fas fa-book"></i> Catálogo de Biblioteca</h2>
             </div>
 
             <!-- Mensajes Flash -->
@@ -166,21 +242,27 @@
             <div class="row mb-4">
                 <div class="col-md-12">
                     <div class="card book-form">
-                        <div class="card-header bg-primary text-white">
-                            <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Agregar Nuevo Libro</h5>
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Agregar Nueva Obra</h5>
                         </div>
                         <div class="card-body">
-                            <form action="{{ url_for('agregar_libro') }}" method="POST" enctype="multipart/form-data" class="row g-3">
+                            <form action="{{ url_for('agregar_libro') }}" method="POST" class="row g-3" enctype="multipart/form-data" onsubmit="return validarFormularioAgregar()">
                                 <div class="col-md-4">
                                     <div class="form-floating">
-                                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Nombre del libro" required>
-                                        <label for="nombre">Nombre del libro</label>
+                                        <input type="text" class="form-control" id="nombre" name="nombre" placeholder="Título de la obra" required>
+                                        <label for="nombre">Título de la obra</label>
                                     </div>
                                 </div>
                                 <div class="col-md-3">
                                     <div class="form-floating">
                                         <input type="text" class="form-control" id="editorial" name="editorial" placeholder="Editorial" required>
                                         <label for="editorial">Editorial</label>
+                                    </div>
+                                </div>
+                                <div class="col-md-2">
+                                    <div class="form-floating">
+                                        <input type="number" class="form-control" id="precio" name="precio" placeholder="Precio" step="0.01" min="0" required>
+                                        <label for="precio">Precio</label>
                                     </div>
                                 </div>
                                 <div class="col-md-2">
@@ -192,8 +274,8 @@
                                 <div class="col-md-2">
                                     <div class="form-floating">
                                         <select class="form-select" id="estado" name="estado" required>
-                                            <option value="Stock">Stock</option>
-                                            <option value="NoStock">No Stock</option>
+                                            <option value="Stock">Disponible</option>
+                                            <option value="NoStock">Agotado</option>
                                         </select>
                                         <label for="estado">Estado</label>
                                     </div>
@@ -204,15 +286,15 @@
                                         <label for="cantidad">Cant.</label>
                                     </div>
                                 </div>
-                                <!-- Campo para subir la imagen -->
+                                <!-- Nuevo campo para la imagen -->
                                 <div class="col-md-4">
                                     <div class="form-floating">
-                                        <input type="file" class="form-control" id="imagen" name="imagen" accept=".jpg, .jpeg" required>
-                                        <label for="imagen">Imagen (formato JPG)</label>
+                                        <input type="file" class="form-control" id="imagen" name="imagen" accept="image/*" required>
+                                        <label for="imagen">Imagen del libro</label>
                                     </div>
                                 </div>
                                 <div class="col-12 text-end">
-                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Agregar Libro</button>
+                                    <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Registrar Obra</button>
                                 </div>
                             </form>
                         </div>
@@ -226,59 +308,59 @@
                     <thead>
                         <tr>
                             <th>ID</th>
-                            <th>Nombre</th>
+                            <th>Título</th>
                             <th>Editorial</th>
                             <th>Edición</th>
                             <th>Estado</th>
-                            <th>Cantidad</th>
+                            <th>Ejemplares</th>
                             <th>Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% for libro in libros %}
                         <tr>
-                            <td>{{ libro[0] }}</td>
-                            <td>{{ libro[1] }}</td>
-                            <td>{{ libro[2] }}</td>
-                            <td>{{ libro[3] }}</td>
+                            <td>{{ libro['idLibro'] }}</td>
+                            <td>{{ libro['Nombre'] }}</td>
+                            <td>{{ libro['Editorial'] }}</td>
+                            <td>{{ libro['Edicion'] }}</td>
                             <td>
-                                {% if libro[4] == 'Stock' %}
-                                    <span class="status-badge status-stock">Stock</span>
+                                {% if libro['Estado'] == 'Stock' %}
+                                    <span class="status-badge status-stock">Disponible</span>
                                 {% else %}
-                                    <span class="status-badge status-nostock">No Stock</span>
+                                    <span class="status-badge status-nostock">Agotado</span>
                                 {% endif %}
                             </td>
-                            <td>{{ libro[5] }}</td>
+                            <td>{{ libro['Cantidad'] }}</td>
                             <td>
-                                <button class="btn btn-sm btn-warning btn-action" data-bs-toggle="collapse" data-bs-target="#editForm{{ libro[0] }}">
+                                <button class="btn btn-sm btn-warning btn-action" data-bs-toggle="collapse" data-bs-target="#editForm{{ libro['idLibro'] }}">
                                     <i class="fas fa-edit"></i> Editar
                                 </button>
-                                <a href="{{ url_for('eliminar_libro', id=libro[0]) }}" class="btn btn-sm btn-danger btn-action" 
-                                   onclick="return confirm('¿Estás seguro de que deseas eliminar este libro?')">
+                                <a href="{{ url_for('eliminar_libro', id=libro['idLibro']) }}" class="btn btn-sm btn-danger btn-action" 
+                                   onclick="return confirm('¿Está seguro que desea retirar esta obra del catálogo?')">
                                     <i class="fas fa-trash-alt"></i> Eliminar
                                 </a>
                                 
                                 <!-- Formulario de edición colapsable -->
-                                <div class="collapse mt-2" id="editForm{{ libro[0] }}">
+                                <div class="collapse mt-2" id="editForm{{ libro['idLibro'] }}">
                                     <div class="edit-form">
-                                        <form action="{{ url_for('editar_libro', id=libro[0]) }}" method="POST" class="row g-2">
+                                        <form id="editForm{{ libro['idLibro'] }}" action="{{ url_for('editar_libro', id=libro['idLibro']) }}" method="POST" class="row g-2" onsubmit="return validarFormularioEditar('editForm{{ libro['idLibro'] }}')">
                                             <div class="col-md-4">
-                                                <input type="text" class="form-control form-control-sm" name="nombre" value="{{ libro[1] }}" required>
+                                                <input type="text" class="form-control form-control-sm" name="nombre" value="{{ libro['Nombre'] }}" required>
                                             </div>
                                             <div class="col-md-2">
-                                                <input type="text" class="form-control form-control-sm" name="editorial" value="{{ libro[2] }}" required>
+                                                <input type="text" class="form-control form-control-sm" name="editorial" value="{{ libro['Editorial'] }}" required>
                                             </div>
                                             <div class="col-md-2">
-                                                <input type="text" class="form-control form-control-sm" name="edicion" value="{{ libro[3] }}">
+                                                <input type="text" class="form-control form-control-sm" name="edicion" value="{{ libro['Edicion'] }}">
                                             </div>
                                             <div class="col-md-2">
                                                 <select class="form-select form-select-sm" name="estado" required>
-                                                    <option value="Stock" {% if libro[4] == 'Stock' %}selected{% endif %}>Stock</option>
-                                                    <option value="NoStock" {% if libro[4] == 'NoStock' %}selected{% endif %}>No Stock</option>
+                                                    <option value="Stock" {% if libro['Estado'] == 'Stock' %}selected{% endif %}>Disponible</option>
+                                                    <option value="NoStock" {% if libro['Estado'] == 'NoStock' %}selected{% endif %}>Agotado</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-1">
-                                                <input type="number" class="form-control form-control-sm" name="cantidad" value="{{ libro[5] }}" required min="0">
+                                                <input type="number" class="form-control form-control-sm" name="cantidad" value="{{ libro['Cantidad'] }}" required min="0">
                                             </div>
                                             <div class="col-md-1">
                                                 <button type="submit" class="btn btn-sm btn-success">
@@ -295,9 +377,16 @@
                 </table>
             </div>
 
+            <!-- Botones de gestión de clientes y logout -->
+            <div class="text-center mt-4">
+                <a href="{{ url_for('gestionar_clientes') }}" class="btn btn-primary">
+                    <i class="fas fa-users"></i> Gestionar Clientes
+                </a>
+            </div>
+
             <div class="text-center logout-btn">
                 <a href="{{ url_for('logout') }}" class="btn btn-secondary">
-                    <i class="fas fa-sign-out-alt"></i> Cerrar sesión
+                    <i class="fas fa-sign-out-alt"></i> Finalizar sesión
                 </a>
             </div>
         </div>
@@ -305,5 +394,47 @@
 
     <!-- Bootstrap JS Bundle with Popper -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Script de validación -->
+    <script>
+        // Función para validar el formulario de agregar libro
+        function validarFormularioAgregar() {
+            const estado = document.getElementById('estado').value;
+            const cantidad = parseInt(document.getElementById('cantidad').value);
+
+            if (estado === 'NoStock' && cantidad > 0) {
+                alert('Error: No se puede tener una cantidad mayor a cero si el estado es "No disponible".');
+                return false; // Evita que el formulario se envíe
+            }
+
+            if (estado === 'Stock' && cantidad === 0) {
+                alert('Error: No se puede tener una cantidad igual a cero si el estado es "Disponible".');
+                return false; // Evita que el formulario se envíe
+            }
+
+            return true; // Permite que el formulario se envíe
+        }
+
+        // Función para validar el formulario de editar libro
+        function validarFormularioEditar(formId) {
+            const form = document.getElementById(formId);
+            const estado = form.querySelector('select[name="estado"]').value;
+            const cantidad = parseInt(form.querySelector('input[name="cantidad"]').value);
+
+            if (estado === 'NoStock' && cantidad > 0) {
+                alert('Error: No se puede tener una cantidad mayor a cero si el estado es "No disponible".');
+                return false; // Evita que el formulario se envíe
+            }
+
+            if (estado === 'Stock' && cantidad === 0) {
+                alert('Error: No se puede tener una cantidad igual a cero si el estado es "Disponible".');
+                return false; // Evita que el formulario se envíe
+            }
+
+            return true; // Permite que el formulario se envíe
+        }
+    </script>
+</body>
+</html>
 </body>
 </html>

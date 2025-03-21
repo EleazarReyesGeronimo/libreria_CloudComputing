@@ -1,35 +1,165 @@
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import Flask, render_template, request, redirect, url_for, flash, session, jsonify
+from flask_mail import Mail, Message
 import mysql.connector
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
 import os
+import requests
+from functools import wraps
+from datetime import datetime, timedelta
+from datetime import datetime
+import uuid
+import hashlib
+
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para usar sesiones
 
-UPLOAD_FOLDER = 'static/images'  # Carpeta donde se guardarán las imágenes
-ALLOWED_EXTENSIONS = {'jpg', 'jpeg'}  # Extensiones permitidas
+# Configuración de Flask-Mail
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Servidor SMTP de Gmail
+app.config['MAIL_PORT'] = 587  # Puerto para TLS
+app.config['MAIL_USE_TLS'] = True  # Usar TLS
+app.config['MAIL_USERNAME'] = '20203tn110@utez.edu.mx'  # Tu correo electrónico
+app.config['MAIL_PASSWORD'] = 'Sanandres200245'  # Tu contraseña de correo
+app.config['MAIL_DEFAULT_SENDER'] = '20203tn110@utez.edu.mx'  # Correo remitente
 
+mail = Mail(app)
+
+# Configura la carpeta donde se guardarán las imágenes
+UPLOAD_FOLDER = 'static/images'
+ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif'}
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# IP pública de prueba (puedes cambiarla para probar diferentes ubicaciones)
+TEST_IP = '187.188.133.8'  # Google DNS como ejemplo, cámbiala por la IP que quieras probar
+
+# Función para obtener la ubicación desde una IP usando Nominatim
+def get_location_from_ip(ip):
+    try:
+        # Primero obtenemos información de la IP
+        response = requests.get(f'https://ipapi.co/{ip}/json/')
+        if response.status_code == 200:
+            ip_data = response.json()
+            
+            # Extraemos los datos del país y estado
+            country = ip_data.get('country_name', 'Desconocido')
+            region = ip_data.get('region', 'Desconocido')
+            
+            return {
+                'country': country,
+                'region': region
+            }
+        return {'country': 'Desconocido', 'region': 'Desconocido'}
+    except Exception as e:
+        print(f"Error obteniendo ubicación: {e}")
+        return {'country': 'Desconocido', 'region': 'Desconocido'}
 
 # Función para verificar la extensión del archivo
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+def api_key_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        api_key = request.headers.get('X-API-KEY')
+        if not api_key:
+            return jsonify({"error": "API_KEY is missing"}), 401
+
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        # Verificar si la API_KEY existe en la tabla Administradores o Clientes
+        cursor.execute('SELECT * FROM Administradores WHERE api_key = %s', (api_key,))
+        user = cursor.fetchone()
+
+        if not user:
+            cursor.execute('SELECT * FROM Clientes WHERE api_key = %s', (api_key,))
+            user = cursor.fetchone()
+
+        if user:
+            # Verificar si la API_KEY ha expirado (por ejemplo, después de 24 horas)
+            api_key_creation_time = user['api_key_created_at']
+            if datetime.now() - api_key_creation_time > timedelta(hours=24):
+                cursor.close()
+                conn.close()
+                return jsonify({"error": "API_KEY has expired"}), 403
+
+        cursor.close()
+        conn.close()
+
+        if not user:
+            return jsonify({"error": "Invalid API_KEY"}), 403
+
+        return f(*args, **kwargs)
+    return decorated_function
+
+def generate_dynamic_api_key(user_id):
+    # Combinar el ID del usuario con la fecha y hora actual
+    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
+    unique_string = f"{user_id}-{timestamp}"
+    
+    # Generar un hash único usando SHA-256
+    api_key = hashlib.sha256(unique_string.encode()).hexdigest()
+    return api_key
 
 # Configura tu conexión a la base de datos
 def get_db_connection():
-    conn = mysql.connector.connect(
-        host='localhost',
-        user='root',  # Cambia el usuario si es necesario
-        password='root',  # Cambia la contraseña si es necesario
-        database='Libreria'
-    )
-    return conn
+    try:
+        conn = mysql.connector.connect(
+            host='localhost',
+            user='root',  
+            password='root',  
+            database='Libreria',
+            port=3306  # Asegúrate de que es el puerto correcto
+        )
+        return conn
+    except mysql.connector.Error as err:
+        print(f"Error al conectar a la base de datos: {err}")
+        return None
+
+# Endpoint para obtener la ubicación por IP
+@app.route('/get_location')
+def get_location():
+    # En producción usaríamos la IP real del cliente
+    # client_ip = request.remote_addr
+    
+    # Para pruebas, usamos la IP de prueba configurada
+    client_ip = TEST_IP
+    
+    location = get_location_from_ip(client_ip)
+    return jsonify(location)
+
+@app.route('/ruta-protegida')
+@api_key_required
+def ruta_protegida():
+    return jsonify({"message": "Acceso concedido a la ruta protegida"})
 
 # Página principal con los botones de inicio de sesión y crear cuenta
 @app.route('/')
 def home():
     return render_template('home.html')
+
+@app.route('/regenerar-api-key', methods=['POST'])
+@api_key_required
+def regenerar_api_key():
+    if 'usuario' in session:
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
+
+        if session['tipo_usuario'] == 'admin':
+            new_api_key = generate_dynamic_api_key(session['IDpersonal'])
+            cursor.execute('UPDATE Administradores SET api_key = %s, api_key_created_at = NOW() WHERE IDpersonal = %s', (new_api_key, session['IDpersonal']))
+        else:
+            new_api_key = generate_dynamic_api_key(session['idClientes'])
+            cursor.execute('UPDATE Clientes SET api_key = %s, api_key_created_at = NOW() WHERE idClientes = %s', (new_api_key, session['idClientes']))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        session['api_key'] = new_api_key
+        return jsonify({"message": "API_KEY regenerada exitosamente", "api_key": new_api_key})
+
+    return jsonify({"error": "No autorizado"}), 401
 
 # Página de inicio de sesión
 @app.route('/login', methods=['GET', 'POST'])
@@ -38,26 +168,37 @@ def login():
         usuario = request.form['usuario']
         contrasena = request.form['contrasena']
 
-        # Conexión a la base de datos
         conn = get_db_connection()
-        cursor = conn.cursor()
+        cursor = conn.cursor(dictionary=True)
 
         # Verificar si el usuario existe en la tabla Administradores
         cursor.execute('SELECT * FROM Administradores WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
         user = cursor.fetchone()
 
         if user:
-            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
-            session['tipo_usuario'] = 'admin'  # Identificamos que es un administrador
+            # Generar una nueva API_KEY dinámica
+            new_api_key = generate_dynamic_api_key(user['IDpersonal'])
+            
+            # Actualizar la API_KEY en la base de datos
+            cursor.execute('UPDATE Administradores SET api_key = %s WHERE IDpersonal = %s', (new_api_key, user['IDpersonal']))
+            conn.commit()
+
+            # Guardar datos en la sesión
+            session['usuario'] = usuario
+            session['tipo_usuario'] = 'admin'
+            session['api_key'] = new_api_key
+
             cursor.close()
             conn.close()
-            return redirect(url_for('index'))  # Redirigir al área de libros o página principal
+
+            # Redirigir al área de administración
+            return redirect(url_for('index'))  # Cambia 'index' por la ruta que desees para administradores
 
         else:
             flash('Credenciales incorrectas, por favor intenta nuevamente.', 'danger')
             cursor.close()
             conn.close()
-            return redirect(url_for('login'))  # Vuelve al login si la autenticación falla
+            return redirect(url_for('login'))
 
     return render_template('login.html')  # Página de login
 
@@ -68,30 +209,41 @@ def login_cliente():
         usuario = request.form['usuario']
         contrasena = request.form['contrasena']
 
-        # Conexión a la base de datos
         conn = get_db_connection()
-        cursor = conn.cursor(dictionary=True)  # Usar dictionary=True para obtener resultados como diccionarios
+        cursor = conn.cursor(dictionary=True)
 
         # Verificar si el usuario existe en la tabla Clientes
         cursor.execute('SELECT * FROM Clientes WHERE Usuario = %s AND Contrasena = %s', (usuario, contrasena))
         user = cursor.fetchone()
 
         if user:
-            session['usuario'] = usuario  # Guardamos el nombre de usuario en la sesión
-            session['id_cliente'] = user['idClientes']  # Guardamos el ID del cliente
-            session['nombre_cliente'] = user['Nombre']  # Guardamos el nombre del cliente
-            session['tipo_usuario'] = 'cliente'  # Identificamos que es un cliente
+            # Generar una nueva API_KEY dinámica
+            new_api_key = generate_dynamic_api_key(user['idClientes'])
+            
+            # Actualizar la API_KEY en la base de datos
+            cursor.execute('UPDATE Clientes SET api_key = %s WHERE idClientes = %s', (new_api_key, user['idClientes']))
+            conn.commit()
+
+            # Guardar datos en la sesión
+            session['usuario'] = usuario
+            session['id_cliente'] = user['idClientes']
+            session['nombre_cliente'] = user['Nombre']
+            session['tipo_usuario'] = 'cliente'
+            session['api_key'] = new_api_key
+
             cursor.close()
             conn.close()
-            return redirect(url_for('catalogo'))  # Redirigir al catálogo de libros
+
+            # Redirigir al catálogo de libros
+            return redirect(url_for('catalogo'))  # Cambia 'catalogo' por la ruta que desees para clientes
 
         else:
             flash('Credenciales incorrectas, por favor intenta nuevamente.', 'danger')
             cursor.close()
             conn.close()
-            return redirect(url_for('login_cliente'))  # Vuelve al login si la autenticación falla
+            return redirect(url_for('login_cliente'))
 
-    return render_template('login_cliente.html')  # Página de login para clientes
+    return render_template('login_cliente.html') # Página de login para clientes
 
 # Página para crear una nueva cuenta
 @app.route('/crear-cuenta')
@@ -138,8 +290,124 @@ def registrar():
 
     flash('Cuenta creada exitosamente, ya puedes iniciar sesión.', 'success')
     return redirect(url_for('login_cliente'))  # Redirigir al login de cliente después de registrar
+# Ruta para gestionar clientes (solo para administradores)
+# Ruta para gestionar clientes (solo para administradores)
+@app.route('/gestionar-clientes')
+def gestionar_clientes():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
 
-# Ruta para mostrar el catálogo de libros
+    # Conexión a la base de datos
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    # Obtener todos los clientes con su dirección
+    cursor.execute('''
+        SELECT c.*, d.Calle, d.Colonia, d.CP, d.NumExterior, d.NumInterior, d.NumContacto 
+        FROM Clientes c 
+        JOIN Direcciones d ON c.IDireccion = d.idDirecciones
+    ''')
+    clientes = cursor.fetchall()
+
+    cursor.close()
+    conn.close()
+
+    return render_template('gestionar_clientes.html', clientes=clientes)
+
+# Ruta para agregar un nuevo cliente (solo para administradores)
+@app.route('/agregar-cliente')
+def agregar_cliente():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
+
+    return render_template('crear_cuenta.html')
+# Ruta para eliminar un cliente (solo para administradores)
+@app.route('/eliminar-cliente/<int:id>', methods=['GET'])
+def eliminar_cliente(id):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Eliminar el cliente y su dirección asociada
+    cursor.execute('DELETE FROM Clientes WHERE idClientes = %s', (id,))
+    cursor.execute('DELETE FROM Direcciones WHERE idDirecciones = (SELECT IDireccion FROM Clientes WHERE idClientes = %s)', (id,))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Cliente eliminado exitosamente.', 'success')
+    return redirect(url_for('gestionar_clientes'))
+# Ruta para editar un cliente (solo para administradores)
+@app.route('/editar-cliente/<int:id>', methods=['GET', 'POST'])
+def editar_cliente(id):
+    # Verificar que el usuario sea un administrador
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
+
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+
+    if request.method == 'POST':
+        # Obtener datos del formulario
+        nombre = request.form['nombre']
+        apellidos = request.form['apellidos']
+        email = request.form['email']
+        usuario = request.form['usuario']
+        contrasena = request.form.get('contrasena', '')
+        calle = request.form['calle']
+        colonia = request.form['colonia']
+        cp = request.form['cp']
+        num_exterior = request.form['num_exterior']
+        num_interior = request.form['num_interior']
+        num_contacto = request.form['num_contacto']
+
+        # Actualizar la dirección
+        cursor.execute('''
+            UPDATE Direcciones 
+            SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
+            WHERE idDirecciones = (SELECT IDireccion FROM Clientes WHERE idClientes = %s)
+        ''', (calle, colonia, cp, num_exterior, num_interior, num_contacto, id))
+
+        # Actualizar el cliente
+        if contrasena:
+            cursor.execute('''
+                UPDATE Clientes 
+                SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s, Contrasena = %s 
+                WHERE idClientes = %s
+            ''', (nombre, apellidos, email, usuario, contrasena, id))
+        else:
+            cursor.execute('''
+                UPDATE Clientes 
+                SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s 
+                WHERE idClientes = %s
+            ''', (nombre, apellidos, email, usuario, id))
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        # Mostrar mensaje de éxito y redirigir a la gestión de clientes
+        flash('Cliente actualizado exitosamente.', 'success')
+        return redirect(url_for('gestionar_clientes'))
+
+    # Obtener los datos del cliente a editar
+    cursor.execute('''
+        SELECT c.*, d.Calle, d.Colonia, d.CP, d.NumExterior, d.NumInterior, d.NumContacto 
+        FROM Clientes c 
+        JOIN Direcciones d ON c.IDireccion = d.idDirecciones
+        WHERE c.idClientes = %s
+    ''', (id,))
+    cliente = cursor.fetchone()
+
+    cursor.close()
+    conn.close()
+
+    # Renderizar la plantilla de edición
+    return render_template('editar_cliente.html', cliente=cliente)
+# Catálogo de libros para clientes
 @app.route('/catalogo')
 def catalogo():
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
@@ -147,30 +415,40 @@ def catalogo():
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-
-    # Obtener todos los libros
-    cursor.execute("SELECT idLibro, Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion, Imagen, EstadoNuevo, FechaLimiteNuevo FROM Libro")
+    cursor.execute("SELECT * FROM Libro")
     libros = cursor.fetchall()
-
-    # Verificar si el libro es "nuevo" basado en la fecha límite
-    fecha_actual = datetime.now()
-    for libro in libros:
-        if libro['FechaLimiteNuevo']:
-            libro['es_nuevo'] = fecha_actual <= libro['FechaLimiteNuevo']
-        else:
-            libro['es_nuevo'] = False
-
     cursor.close()
     conn.close()
 
-    return render_template('catalogo_cliente.html', libros=libros)
+    # Obtener la ubicación para pasar al template
+    # En producción usaríamos la IP real del cliente
+    # client_ip = request.remote_addr
+    
+    # Para pruebas, usamos la IP de prueba configurada
+    client_ip = TEST_IP
+    location = get_location_from_ip(client_ip)
+
+    return render_template('catalogo_cliente.html', libros=libros, location=location)
+
 # Detalle de un libro
 @app.route('/libro/<int:id>')
 def detalle_libro(id):
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
-    cursor.execute("SELECT * FROM Libro WHERE idLibro = %s", (id,))
+
+    # Obtener los detalles del libro
+    cursor.execute('SELECT * FROM Libro WHERE idLibro = %s', (id,))
     libro = cursor.fetchone()
+
+    # Obtener las reseñas del libro
+    cursor.execute('''
+        SELECT r.*, c.Nombre AS nombre_cliente 
+        FROM Resenas r 
+        JOIN Clientes c ON r.idCliente = c.idClientes 
+        WHERE r.idLibro = %s
+    ''', (id,))
+    resenas = cursor.fetchall()
+
     cursor.close()
     conn.close()
 
@@ -178,7 +456,7 @@ def detalle_libro(id):
         flash("Libro no encontrado.", "danger")
         return redirect(url_for('catalogo'))
 
-    return render_template('detalle_libro.html', libro=libro)
+    return render_template('detalle_libro.html', libro=libro, resenas=resenas)
 
 # Calificar libro
 @app.route('/calificar/<int:id_libro>', methods=['POST'])
@@ -239,10 +517,14 @@ def perfil_cliente():
     
     cliente = cursor.fetchone()
     
+    # Obtener todas las direcciones del cliente
+    cursor.execute('SELECT * FROM Direcciones WHERE idClientes = %s', (session.get('id_cliente'),))
+    direcciones = cursor.fetchall()
+    
     cursor.close()
     conn.close()
     
-    return render_template('perfil_cliente.html', cliente=cliente)
+    return render_template('perfil_cliente.html', cliente=cliente, direcciones=direcciones)
 
 # Actualizar perfil del cliente
 @app.route('/actualizar-perfil', methods=['POST'])
@@ -255,40 +537,24 @@ def actualizar_perfil():
     apellidos = request.form['apellidos']
     email = request.form['email']
     usuario = request.form['usuario']
-    
-    # Datos de dirección
-    calle = request.form['calle']
-    colonia = request.form['colonia']
-    cp = request.form['cp']
-    num_exterior = request.form['num_exterior']
-    num_interior = request.form['num_interior']
-    num_contacto = request.form['num_contacto']
+    contrasena = request.form.get('contrasena', '')
     
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
     
-    # Obtener el ID de la dirección del cliente
-    cursor.execute('SELECT IDireccion FROM Clientes WHERE idClientes = %s', (session.get('id_cliente'),))
-    id_direccion = cursor.fetchone()['IDireccion']
-    
-    # Actualizar la dirección
-    cursor.execute('''
-        UPDATE Direcciones 
-        SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s 
-        WHERE idDirecciones = %s
-    ''', (calle, colonia, cp, num_exterior, num_interior, num_contacto, id_direccion))
-    
     # Actualizar datos del cliente
-    cursor.execute('''
-        UPDATE Clientes 
-        SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s 
-        WHERE idClientes = %s
-    ''', (nombre, apellidos, email, usuario, session.get('id_cliente')))
-    
-    # Si se proporciona una nueva contraseña, actualizarla
-    if 'contrasena' in request.form and request.form['contrasena'].strip():
-        cursor.execute('UPDATE Clientes SET Contrasena = %s WHERE idClientes = %s', 
-                      (request.form['contrasena'], session.get('id_cliente')))
+    if contrasena:
+        cursor.execute('''
+            UPDATE Clientes 
+            SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s, Contrasena = %s 
+            WHERE idClientes = %s
+        ''', (nombre, apellidos, email, usuario, contrasena, session.get('id_cliente')))
+    else:
+        cursor.execute('''
+            UPDATE Clientes 
+            SET Nombre = %s, Apellidos = %s, Email = %s, Usuario = %s 
+            WHERE idClientes = %s
+        ''', (nombre, apellidos, email, usuario, session.get('id_cliente')))
     
     conn.commit()
     
@@ -303,6 +569,119 @@ def actualizar_perfil():
     flash('Perfil actualizado exitosamente.', 'success')
     return redirect(url_for('perfil_cliente'))
 
+@app.route('/agregar-direccion', methods=['GET', 'POST'])
+def agregar_direccion():
+    
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    if request.method == 'POST':
+        calle = request.form['calle']
+        colonia = request.form['colonia']
+        cp = request.form['cp']
+        num_exterior = request.form['num_exterior']
+        num_interior = request.form['num_interior']
+        num_contacto = request.form['num_contacto']
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Insertar la nueva dirección
+        cursor.execute('''
+            INSERT INTO Direcciones (Calle, Colonia, CP, NumExterior, NumInterior, NumContacto, idClientes)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            ''', (calle, colonia, cp, num_exterior, num_interior, num_contacto, session.get('id_cliente')))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash('Dirección agregada exitosamente.', 'success')
+        return redirect(url_for('perfil_cliente'))
+    
+    return render_template('agregar_direccion.html')
+
+@app.route('/editar-direccion/<int:id>', methods=['GET', 'POST'])
+def editar_direccion(id):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    if request.method == 'POST':
+        calle = request.form['calle']
+        colonia = request.form['colonia']
+        cp = request.form['cp']
+        num_exterior = request.form['num_exterior']
+        num_interior = request.form['num_interior']
+        num_contacto = request.form['num_contacto']
+        
+        # Actualizar la dirección
+        cursor.execute('''
+            UPDATE Direcciones 
+            SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
+            WHERE idDirecciones = %s
+        ''', (calle, colonia, cp, num_exterior, num_interior, num_contacto, id))
+        
+        conn.commit()
+        cursor.close()
+        conn.close()
+        
+        flash('Dirección actualizada exitosamente.', 'success')
+        return redirect(url_for('perfil_cliente'))
+    
+    # Obtener la dirección a editar
+    cursor.execute('SELECT * FROM Direcciones WHERE idDirecciones = %s', (id,))
+    direccion = cursor.fetchone()
+    
+    cursor.close()
+    conn.close()
+    
+    return render_template('editar_direccion.html', direccion=direccion)
+
+@app.route('/eliminar-direccion/<int:id>', methods=['GET'])
+def eliminar_direccion(id):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # Eliminar la dirección
+    cursor.execute('DELETE FROM Direcciones WHERE idDirecciones = %s', (id,))
+    conn.commit()
+    
+    cursor.close()
+    conn.close()
+    
+    flash('Dirección eliminada exitosamente.', 'success')
+    return redirect(url_for('perfil_cliente'))       
+
+@app.route('/eliminar-cuenta', methods=['GET'])
+def eliminar_cuenta():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+    
+    conn = get_db_connection()
+    cursor = conn.cursor(dictionary=True)
+    
+    # Eliminar la cuenta del cliente
+    cursor.execute('DELETE FROM Clientes WHERE idClientes = %s', (session.get('id_cliente'),))
+    conn.commit()
+    
+    cursor.close()
+    conn.close()
+    
+    # Cerrar sesión
+    session.pop('usuario', None)
+    session.pop('tipo_usuario', None)
+    session.pop('id_cliente', None)
+    session.pop('nombre_cliente', None)
+    
+    flash('Tu cuenta ha sido eliminada exitosamente.', 'success')
+    return redirect(url_for('home'))
+
 # Página para gestionar los libros (CRUD)
 @app.route('/index')
 def index():
@@ -311,7 +690,7 @@ def index():
 
     # Conexión a la base de datos
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     # Obtener todos los libros
     cursor.execute('SELECT * FROM Libro')
@@ -322,7 +701,7 @@ def index():
 
     return render_template('index.html', libros=libros)
 
-# Ruta para agregar un libro
+# Ruta para agregar un nuevo libro
 @app.route('/agregar-libro', methods=['POST'])
 def agregar_libro():
     if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
@@ -332,49 +711,41 @@ def agregar_libro():
     editorial = request.form['editorial']
     edicion = request.form['edicion']
     estado = request.form['estado']
-    cantidad = request.form['cantidad']
+    cantidad = int(request.form['cantidad'])
+    precio = float(request.form['precio'])  # Nuevo campo: Precio
 
-    # Procesar la imagen
+    # Manejo de la imagen
     if 'imagen' not in request.files:
         flash('No se ha seleccionado una imagen.', 'danger')
         return redirect(url_for('index'))
 
-    imagen = request.files['imagen']
-
-    if imagen.filename == '':
+    file = request.files['imagen']
+    if file.filename == '':
         flash('No se ha seleccionado una imagen.', 'danger')
         return redirect(url_for('index'))
 
-    if imagen and allowed_file(imagen.filename):
-        # Guardar la imagen en la carpeta static/images
-        filename = secure_filename(imagen.filename)
-        imagen.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
-
-        # Guardar la ruta de la imagen en la base de datos
-        ruta_imagen = os.path.join('images', filename)
-
-        # Calcular la fecha límite para el label "Nuevo" (30 días después de la fecha actual)
-        fecha_actual = datetime.now()
-        fecha_limite_nuevo = fecha_actual + timedelta(days=30)
-
-        # Conexión a la base de datos
-        conn = get_db_connection()
-        cursor = conn.cursor()
-
-        # Insertar el nuevo libro con la ruta de la imagen y la fecha límite
-        cursor.execute("""
-            INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, FechaCreacion, Imagen, EstadoNuevo, FechaLimiteNuevo)
-            VALUES (%s, %s, %s, %s, %s, NOW(), %s, %s, %s)
-        """, (nombre, editorial, edicion, estado, cantidad, ruta_imagen, True, fecha_limite_nuevo))
-
-        conn.commit()
-        cursor.close()
-        conn.close()
-
-        flash('Libro agregado exitosamente.', 'success')
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     else:
-        flash('Formato de imagen no válido. Solo se permiten archivos JPG.', 'danger')
+        flash('Formato de imagen no permitido.', 'danger')
+        return redirect(url_for('index'))
 
+    # Conexión a la base de datos
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Insertar el nuevo libro con la ruta de la imagen y el precio
+    cursor.execute("""
+        INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, Precio, FechaCreacion, Imagen)
+        VALUES (%s, %s, %s, %s, %s, %s, NOW(), %s)
+    """, (nombre, editorial, edicion, estado, cantidad, precio, filename))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Libro agregado exitosamente.', 'success')
     return redirect(url_for('index'))
 
 # Ruta para editar un libro
@@ -384,7 +755,7 @@ def editar_libro(id):
         return redirect(url_for('login'))
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)
 
     if request.method == 'POST':
         nombre = request.form['nombre']
@@ -423,7 +794,18 @@ def eliminar_libro(id):
         return redirect(url_for('login'))
 
     conn = get_db_connection()
-    cursor = conn.cursor()
+    cursor = conn.cursor(dictionary=True)  # Usar dictionary=True para obtener resultados como diccionarios
+
+    # Obtener la ruta de la imagen antes de eliminar el libro
+    cursor.execute('SELECT Imagen FROM Libro WHERE idLibro = %s', (id,))
+    libro = cursor.fetchone()  # Ahora libro es un diccionario, no una tupla
+
+    if libro and libro['Imagen']:  # Acceder a la clave 'Imagen' del diccionario
+        # Eliminar la imagen del servidor
+        try:
+            os.remove(os.path.join(app.config['UPLOAD_FOLDER'], libro['Imagen']))
+        except Exception as e:
+            print(f"Error al eliminar la imagen: {e}")
 
     # Eliminar el libro
     cursor.execute('DELETE FROM Libro WHERE idLibro = %s', (id,))
@@ -455,103 +837,167 @@ def logout_cliente():
     flash('Has cerrado sesión exitosamente.', 'success')
     return redirect(url_for('home'))
 
-# Ruta para gestionar direcciones
-@app.route('/gestion-direcciones', methods=['GET', 'POST'])
-def gestion_direcciones():
+#####
+@app.route('/agregar_al_carrito/<int:id_libro>', methods=['POST'])
+def agregar_al_carrito(id_libro):
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
+
+    cantidad = int(request.form['cantidad'])
+    id_cliente = session.get('id_cliente')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # Verificar si el libro ya está en el carrito
+    cursor.execute('SELECT * FROM Carrito WHERE idCliente = %s AND idLibro = %s', (id_cliente, id_libro))
+    item = cursor.fetchone()
+
+    if item:
+        # Si el libro ya está en el carrito, actualizar la cantidad
+        nueva_cantidad = item['Cantidad'] + cantidad
+        cursor.execute('UPDATE Carrito SET Cantidad = %s WHERE idCarrito = %s', (nueva_cantidad, item['idCarrito']))
+    else:
+        # Si no está en el carrito, agregarlo
+        cursor.execute('INSERT INTO Carrito (idCliente, idLibro, Cantidad) VALUES (%s, %s, %s)', (id_cliente, id_libro, cantidad))
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+    flash('Libro agregado al carrito exitosamente.', 'success')
+    return redirect(url_for('catalogo'))
+####
+
+@app.route('/carrito')
+def ver_carrito():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    id_cliente = session.get('id_cliente')
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        accion = request.form.get('accion')
+    # Obtener los libros en el carrito con su ID, nombre, cantidad y precio
+    cursor.execute('''
+        SELECT l.idLibro, l.Nombre, c.Cantidad, l.Precio 
+        FROM Carrito c 
+        JOIN Libro l ON c.idLibro = l.idLibro 
+        WHERE c.idCliente = %s
+    ''', (id_cliente,))
+    libros = cursor.fetchall()
 
-        if accion == 'agregar':
-            # Agregar una nueva dirección
-            calle = request.form['calle']
-            colonia = request.form['colonia']
-            cp = request.form['cp']
-            num_exterior = request.form['num_exterior']
-            num_interior = request.form['num_interior']
-            num_contacto = request.form['num_contacto']
-
-            cursor.execute("""
-                INSERT INTO Direcciones (Calle, Colonia, CP, NumExterior, NumInterior, NumContacto, idCliente)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
-            """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, session.get('id_cliente')))
-
-            conn.commit()
-            flash('Dirección agregada exitosamente.', 'success')
-
-        elif accion == 'eliminar':
-            # Eliminar una dirección
-            direccion_id = request.form['direccion_id']
-            cursor.execute("""
-                DELETE FROM Direcciones 
-                WHERE idDirecciones = %s AND idCliente = %s
-            """, (direccion_id, session.get('id_cliente')))
-            conn.commit()
-            flash('Dirección eliminada exitosamente.', 'success')
-
-    # Obtener todas las direcciones del cliente
-    cursor.execute("""
-        SELECT * FROM Direcciones 
-        WHERE idCliente = %s
-    """, (session.get('id_cliente'),))
-    direcciones = cursor.fetchall()
+    # Calcular el total de la compra
+    total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
 
     cursor.close()
     conn.close()
 
-    return render_template('gestion_direcciones.html', direcciones=direcciones)
+    return render_template('carrito.html', libros=libros, total=total)
 
-# Ruta para editar una dirección
-@app.route('/editar-direccion/<int:id>', methods=['GET', 'POST'])
-def editar_direccion(id):
+####
+
+@app.route('/eliminar_del_carrito/<int:id_libro>', methods=['POST'])
+def eliminar_del_carrito(id_libro):
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
+
+    id_cliente = session.get('id_cliente')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('DELETE FROM Carrito WHERE idCliente = %s AND idLibro = %s', (id_cliente, id_libro))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    flash('Libro eliminado del carrito exitosamente.', 'success')
+    return redirect(url_for('ver_carrito'))
+
+###
+
+@app.route('/actualizar_carrito/<int:id_libro>', methods=['POST'])
+def actualizar_carrito(id_libro):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    cantidad = int(request.form['cantidad'])
+    id_cliente = session.get('id_cliente')
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    cursor.execute('UPDATE Carrito SET Cantidad = %s WHERE idCliente = %s AND idLibro = %s', (cantidad, id_cliente, id_libro))
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+
+    flash('Cantidad actualizada exitosamente.', 'success')
+    return redirect(url_for('ver_carrito'))
+
+#####
+@app.route('/comprar_carrito', methods=['POST'])
+def comprar_carrito():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    id_cliente = session.get('id_cliente')  # Obtenemos el ID del cliente desde la sesión
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    if request.method == 'POST':
-        # Procesar el formulario de edición
-        calle = request.form['calle']
-        colonia = request.form['colonia']
-        cp = request.form['cp']
-        num_exterior = request.form['num_exterior']
-        num_interior = request.form['num_interior']
-        num_contacto = request.form['num_contacto']
+    # Obtener el correo del cliente desde la base de datos
+    cursor.execute('SELECT Email FROM Clientes WHERE idClientes = %s', (id_cliente,))
+    cliente = cursor.fetchone()
 
-        cursor.execute("""
-            UPDATE Direcciones 
-            SET Calle = %s, Colonia = %s, CP = %s, NumExterior = %s, NumInterior = %s, NumContacto = %s
-            WHERE idDirecciones = %s AND idCliente = %s
-        """, (calle, colonia, cp, num_exterior, num_interior, num_contacto, id, session.get('id_cliente')))
+    if not cliente:
+        flash('No se pudo obtener la información del cliente.', 'danger')
+        return redirect(url_for('ver_carrito'))
 
-        conn.commit()
-        cursor.close()
-        conn.close()
+    email_cliente = cliente['Email']  # Correo del cliente
 
-        flash('Dirección actualizada exitosamente.', 'success')
-        return redirect(url_for('gestion_direcciones'))
+    # Obtener los libros en el carrito
+    cursor.execute('''
+        SELECT l.Nombre, c.Cantidad, c.Precio 
+        FROM Carrito c 
+        JOIN Libro l ON c.idLibro = l.idLibro 
+        WHERE c.idCliente = %s
+    ''', (id_cliente,))
+    libros = cursor.fetchall()
 
-    # Obtener la dirección a editar
-    cursor.execute("""
-        SELECT * FROM Direcciones 
-        WHERE idDirecciones = %s AND idCliente = %s
-    """, (id, session.get('id_cliente')))
-    direccion = cursor.fetchone()
+    # Calcular el total de la compra
+    total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
+
+    # Crear el mensaje del correo
+    mensaje = f"Gracias por tu compra, {session.get('nombre_cliente')}!\n\nDetalles de tu compra:\n"
+    for libro in libros:
+        mensaje += f"- {libro['Nombre']} (Cantidad: {libro['Cantidad']}, Precio: ${libro['Precio']:.2f})\n"
+    mensaje += f"\nTotal: ${total:.2f}"
+
+    # Enviar el correo
+    try:
+        msg = Message(
+            subject="Confirmación de compra",
+            recipients=[email_cliente],  # Correo del cliente (destinatario)
+            body=mensaje
+        )
+        mail.send(msg)
+        flash('Compra realizada exitosamente. Se ha enviado un correo de confirmación.', 'success')
+    except Exception as e:
+        flash(f'Error al enviar el correo: {e}', 'danger')
+
+    # Vaciar el carrito después de la compra
+    cursor.execute('DELETE FROM Carrito WHERE idCliente = %s', (id_cliente,))
+    conn.commit()
 
     cursor.close()
     conn.close()
 
-    if not direccion:
-        flash('Dirección no encontrada.', 'danger')
-        return redirect(url_for('gestion_direcciones'))
-
-    return render_template('editar_direccion.html', direccion=direccion)
+    return redirect(url_for('ver_carrito'))
 
 if __name__ == '__main__':
     app.run(debug=True)
