@@ -843,29 +843,63 @@ def agregar_al_carrito(id_libro):
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
 
-    cantidad = int(request.form['cantidad'])
-    id_cliente = session.get('id_cliente')
+    try:
+        cantidad = int(request.form['cantidad'])
+        id_cliente = session.get('id_cliente')
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    # Verificar si el libro ya está en el carrito
-    cursor.execute('SELECT * FROM Carrito WHERE idCliente = %s AND idLibro = %s', (id_cliente, id_libro))
-    item = cursor.fetchone()
+        # 1. Verificar existencia y precio actual del libro
+        cursor.execute('''
+            SELECT Precio, Cantidad FROM Libro 
+            WHERE idLibro = %s AND Estado = "Stock"
+        ''', (id_libro,))
+        libro = cursor.fetchone()
 
-    if item:
-        # Si el libro ya está en el carrito, actualizar la cantidad
-        nueva_cantidad = item['Cantidad'] + cantidad
-        cursor.execute('UPDATE Carrito SET Cantidad = %s WHERE idCarrito = %s', (nueva_cantidad, item['idCarrito']))
-    else:
-        # Si no está en el carrito, agregarlo
-        cursor.execute('INSERT INTO Carrito (idCliente, idLibro, Cantidad) VALUES (%s, %s, %s)', (id_cliente, id_libro, cantidad))
+        if not libro:
+            flash('El libro no está disponible', 'danger')
+            return redirect(url_for('catalogo'))
 
-    conn.commit()
-    cursor.close()
-    conn.close()
+        # 2. Verificar stock suficiente
+        if libro['Cantidad'] < cantidad:
+            flash('No hay suficiente stock disponible', 'warning')
+            return redirect(url_for('catalogo'))
 
-    flash('Libro agregado al carrito exitosamente.', 'success')
+        # 3. Verificar si ya está en el carrito
+        cursor.execute('''
+            SELECT idCarrito, Cantidad FROM Carrito 
+            WHERE idCliente = %s AND idLibro = %s
+        ''', (id_cliente, id_libro))
+        item = cursor.fetchone()
+
+        if item:
+            # Actualizar cantidad y precio (por si cambió)
+            nueva_cantidad = item['Cantidad'] + cantidad
+            cursor.execute('''
+                UPDATE Carrito 
+                SET Cantidad = %s, Precio = %s 
+                WHERE idCarrito = %s
+            ''', (nueva_cantidad, libro['Precio'], item['idCarrito']))
+        else:
+            # Insertar nuevo item con precio actual
+            cursor.execute('''
+                INSERT INTO Carrito (idCliente, idLibro, Cantidad, Precio)
+                VALUES (%s, %s, %s, %s)
+            ''', (id_cliente, id_libro, cantidad, libro['Precio']))
+
+        conn.commit()
+        flash('Libro agregado al carrito correctamente', 'success')
+
+    except ValueError:
+        flash('Cantidad inválida', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error al agregar al carrito: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
     return redirect(url_for('catalogo'))
 ####
 
@@ -924,80 +958,133 @@ def actualizar_carrito(id_libro):
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
 
-    cantidad = int(request.form['cantidad'])
-    id_cliente = session.get('id_cliente')
+    try:
+        cantidad = int(request.form['cantidad'])
+        id_cliente = session.get('id_cliente')
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+        if cantidad <= 0:
+            flash('La cantidad debe ser mayor a cero', 'danger')
+            return redirect(url_for('ver_carrito'))
 
-    cursor.execute('UPDATE Carrito SET Cantidad = %s WHERE idCliente = %s AND idLibro = %s', (cantidad, id_cliente, id_libro))
-    conn.commit()
+        conn = get_db_connection()
+        cursor = conn.cursor(dictionary=True)
 
-    cursor.close()
-    conn.close()
+        # 1. Verificar stock disponible
+        cursor.execute('''
+            SELECT Cantidad FROM Libro 
+            WHERE idLibro = %s AND Estado = "Stock"
+        ''', (id_libro,))
+        libro = cursor.fetchone()
 
-    flash('Cantidad actualizada exitosamente.', 'success')
+        if not libro or libro['Cantidad'] < cantidad:
+            flash('No hay suficiente stock disponible', 'warning')
+            return redirect(url_for('ver_carrito'))
+
+        # 2. Obtener precio actual
+        cursor.execute('SELECT Precio FROM Libro WHERE idLibro = %s', (id_libro,))
+        precio_actual = cursor.fetchone()['Precio']
+
+        # 3. Actualizar carrito con cantidad y precio actualizado
+        cursor.execute('''
+            UPDATE Carrito 
+            SET Cantidad = %s, Precio = %s
+            WHERE idCliente = %s AND idLibro = %s
+        ''', (cantidad, precio_actual, id_cliente, id_libro))
+
+        conn.commit()
+        flash('Cantidad actualizada correctamente', 'success')
+
+    except ValueError:
+        flash('Cantidad inválida', 'danger')
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error al actualizar: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
+
     return redirect(url_for('ver_carrito'))
-
 #####
 @app.route('/comprar_carrito', methods=['POST'])
 def comprar_carrito():
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
 
-    id_cliente = session.get('id_cliente')  # Obtenemos el ID del cliente desde la sesión
+    id_cliente = session.get('id_cliente')
 
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Obtener el correo del cliente desde la base de datos
-    cursor.execute('SELECT Email FROM Clientes WHERE idClientes = %s', (id_cliente,))
-    cliente = cursor.fetchone()
-
-    if not cliente:
-        flash('No se pudo obtener la información del cliente.', 'danger')
+    # 1. VALIDAR CARRITO VACÍO
+    cursor.execute('SELECT COUNT(*) as total_items FROM Carrito WHERE idCliente = %s', (id_cliente,))
+    if cursor.fetchone()['total_items'] == 0:
+        flash('No hay artículos en el carrito para comprar', 'warning')
         return redirect(url_for('ver_carrito'))
 
-    email_cliente = cliente['Email']  # Correo del cliente
+    # 2. OBTENER DATOS DEL CLIENTE
+    cursor.execute('SELECT Email, Nombre FROM Clientes WHERE idClientes = %s', (id_cliente,))
+    cliente = cursor.fetchone()
+    if not cliente:
+        flash('Error al obtener datos del cliente', 'danger')
+        return redirect(url_for('ver_carrito'))
 
-    # Obtener los libros en el carrito
+    # 3. OBTENER PRODUCTOS CON PRECIO ACTUAL (IMPORTANTE)
     cursor.execute('''
-        SELECT l.Nombre, c.Cantidad, c.Precio 
+        SELECT l.idLibro, l.Nombre, c.Cantidad, l.Precio 
         FROM Carrito c 
         JOIN Libro l ON c.idLibro = l.idLibro 
         WHERE c.idCliente = %s
     ''', (id_cliente,))
     libros = cursor.fetchall()
 
-    # Calcular el total de la compra
+    # 4. CALCULAR TOTAL CORRECTO
     total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
 
-    # Crear el mensaje del correo
-    mensaje = f"Gracias por tu compra, {session.get('nombre_cliente')}!\n\nDetalles de tu compra:\n"
-    for libro in libros:
-        mensaje += f"- {libro['Nombre']} (Cantidad: {libro['Cantidad']}, Precio: ${libro['Precio']:.2f})\n"
-    mensaje += f"\nTotal: ${total:.2f}"
-
-    # Enviar el correo
+    # 5. REGISTRAR VENTAS Y ACTUALIZAR INVENTARIO
     try:
+        for libro in libros:
+            # Registrar venta
+            cursor.execute('''
+                INSERT INTO Ventas (Fecha, Monto, TipoPago, ID_libro, IDClientes)
+                VALUES (NOW(), %s, 'Online', %s, %s)
+            ''', (libro['Precio'] * libro['Cantidad'], libro['idLibro'], id_cliente))
+
+            # Actualizar stock
+            cursor.execute('''
+                UPDATE Libro 
+                SET Cantidad = Cantidad - %s,
+                    Estado = CASE WHEN (Cantidad - %s) <= 0 THEN 'NoStock' ELSE 'Stock' END
+                WHERE idLibro = %s
+            ''', (libro['Cantidad'], libro['Cantidad'], libro['idLibro']))
+
+        # 6. ENVIAR CORREO CON DATOS CORRECTOS
+        mensaje = f"Gracias por tu compra, {cliente['Nombre']}!\n\nDetalles:\n"
+        mensaje += "\n".join([
+            f"- {libro['Nombre']} ({libro['Cantidad']} x ${libro['Precio']:.2f})"
+            for libro in libros
+        ])
+        mensaje += f"\n\nTOTAL: ${total:.2f}"
+
         msg = Message(
-            subject="Confirmación de compra",
-            recipients=[email_cliente],  # Correo del cliente (destinatario)
+            "Confirmación de compra",
+            recipients=[cliente['Email']],
             body=mensaje
         )
         mail.send(msg)
-        flash('Compra realizada exitosamente. Se ha enviado un correo de confirmación.', 'success')
+
+        # 7. VACIAR CARRITO
+        cursor.execute('DELETE FROM Carrito WHERE idCliente = %s', (id_cliente,))
+        conn.commit()
+
+        flash('Compra exitosa! Se envió la confirmación por correo', 'success')
+        
     except Exception as e:
-        flash(f'Error al enviar el correo: {e}', 'danger')
-
-    # Vaciar el carrito después de la compra
-    cursor.execute('DELETE FROM Carrito WHERE idCliente = %s', (id_cliente,))
-    conn.commit()
-
-    cursor.close()
-    conn.close()
+        conn.rollback()
+        flash(f'Error al procesar la compra: {str(e)}', 'danger')
+    finally:
+        cursor.close()
+        conn.close()
 
     return redirect(url_for('ver_carrito'))
-
 if __name__ == '__main__':
     app.run(debug=True)
