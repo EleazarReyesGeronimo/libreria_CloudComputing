@@ -1,0 +1,211 @@
+SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION';
+
+-- Creación del esquema y la base de datos
+CREATE SCHEMA IF NOT EXISTS `Libreria` DEFAULT CHARACTER SET utf8;
+CREATE DATABASE IF NOT EXISTS Libreria;
+USE Libreria;
+
+-- Tabla de Libros
+CREATE TABLE Libro (
+  idLibro INT NOT NULL AUTO_INCREMENT,
+  Nombre VARCHAR(45) NOT NULL,
+  Editorial VARCHAR(45) NOT NULL,
+  Edicion VARCHAR(45) NULL,
+  Estado VARCHAR(45) NOT NULL,
+  Cantidad INT NOT NULL,
+  Precio DECIMAL(10, 2) NOT NULL DEFAULT 0.00,
+  FechaCreacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  Imagen VARCHAR(255),
+  PRIMARY KEY (idLibro),
+  UNIQUE INDEX idLibro_UNIQUE (idLibro ASC)
+) ENGINE = InnoDB;
+
+-- Tabla de Direcciones
+CREATE TABLE Direcciones (
+  idDirecciones INT NOT NULL AUTO_INCREMENT,
+  Calle VARCHAR(45) NOT NULL,
+  Colonia VARCHAR(45) NOT NULL,
+  CP VARCHAR(50) NOT NULL,
+  NumExterior INT NULL,
+  NumInterior INT NOT NULL,
+  NumContacto VARCHAR(15) NOT NULL,
+  idClientes INT,
+  PRIMARY KEY (idDirecciones),
+  CONSTRAINT FK_Direcciones_Clientes 
+    FOREIGN KEY (idClientes) 
+    REFERENCES Clientes(idClientes)
+) ENGINE = InnoDB;
+
+-- Tabla de Clientes
+CREATE TABLE Clientes (
+  idClientes INT NOT NULL AUTO_INCREMENT,
+  Nombre VARCHAR(45) NOT NULL,
+  Apellidos VARCHAR(45) NOT NULL,
+  Email VARCHAR(45) NOT NULL,
+  Usuario VARCHAR(45) NOT NULL,
+  Contrasena VARCHAR(60) NOT NULL,
+  IDireccion INT NOT NULL,
+  api_key VARCHAR(255) UNIQUE,
+  api_key_created_at DATETIME,
+  PRIMARY KEY (idClientes),
+  CONSTRAINT FK_Clientes_Direcciones
+    FOREIGN KEY (IDireccion)
+    REFERENCES Direcciones (idDirecciones)
+    ON DELETE CASCADE
+    ON UPDATE CASCADE
+) ENGINE = InnoDB;
+
+-- Tabla de Personal_Manage
+CREATE TABLE Personal_Manage (
+  IDpersonal INT NOT NULL AUTO_INCREMENT,
+  Usuario VARCHAR(45) NOT NULL,
+  Contrasena VARCHAR(45) NOT NULL,
+  Nombre VARCHAR(45) NOT NULL,
+  Apellido VARCHAR(45) NOT NULL,
+  Rol VARCHAR(45) NOT NULL,
+  IDLibro INT NULL,
+  PRIMARY KEY (IDpersonal),
+  UNIQUE INDEX IDpersonal_UNIQUE (IDpersonal ASC),
+  INDEX IDLibro_idx (IDLibro ASC),
+  CONSTRAINT FK_Personal_Libro
+    FOREIGN KEY (IDLibro)
+    REFERENCES Libro (idLibro)
+    ON DELETE SET NULL
+    ON UPDATE CASCADE
+) ENGINE = InnoDB;
+
+-- Tabla de Administradores
+CREATE TABLE Administradores (
+  IDpersonal INT NOT NULL AUTO_INCREMENT,
+  Usuario VARCHAR(45) NOT NULL,
+  Contrasena VARCHAR(60) NOT NULL,
+  Nombre VARCHAR(45) NOT NULL,
+  Apellido VARCHAR(45) NOT NULL,
+  api_key VARCHAR(255) UNIQUE,
+  api_key_created_at DATETIME,
+  PRIMARY KEY (IDpersonal)
+) ENGINE = InnoDB;
+
+-- Tabla de Reseñas
+CREATE TABLE Resenas (
+  idResena INT NOT NULL AUTO_INCREMENT,
+  idLibro INT NOT NULL,
+  idCliente INT NOT NULL,
+  Calificacion INT NOT NULL,
+  Comentario TEXT,
+  FechaCreacion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (idResena),
+  FOREIGN KEY (idLibro) REFERENCES Libro(idLibro),
+  FOREIGN KEY (idCliente) REFERENCES Clientes(idClientes)
+) ENGINE = InnoDB;
+
+-- Tabla de Carrito
+CREATE TABLE Carrito (
+  idCarrito INT NOT NULL AUTO_INCREMENT,
+  idCliente INT NOT NULL,
+  idLibro INT NOT NULL,
+  Cantidad INT NOT NULL,
+  Precio DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+  PRIMARY KEY (idCarrito),
+  FOREIGN KEY (idCliente) REFERENCES Clientes(idClientes),
+  FOREIGN KEY (idLibro) REFERENCES Libro(idLibro)
+) ENGINE = InnoDB;
+
+-- Tabla de Ventas
+CREATE TABLE Ventas (
+  idVenta INT AUTO_INCREMENT PRIMARY KEY,
+  Fecha DATETIME NOT NULL,
+  ID_libro INT NOT NULL,
+  IDClientes INT NOT NULL,
+  Cantidad INT NOT NULL,
+  PrecioUnitario DECIMAL(10,2) NOT NULL,
+  Total DECIMAL(10,2) NOT NULL,
+  MetodoPago VARCHAR(50) NOT NULL,
+  TransactionID VARCHAR(100),
+  Estado VARCHAR(20) NOT NULL,
+  FOREIGN KEY (ID_libro) REFERENCES Libro(idLibro),
+  FOREIGN KEY (IDClientes) REFERENCES Clientes(idClientes)
+) ENGINE = InnoDB;
+
+-- Tabla para transacciones PayPal
+CREATE TABLE TransaccionesPayPal (
+  idTransaccion INT AUTO_INCREMENT PRIMARY KEY,
+  transaction_id VARCHAR(100) UNIQUE NOT NULL,
+  id_cliente INT NOT NULL,
+  monto DECIMAL(10,2) NOT NULL,
+  moneda CHAR(3) NOT NULL,
+  estado VARCHAR(20) NOT NULL,
+  fecha DATETIME NOT NULL,
+  observaciones TEXT,
+  FOREIGN KEY (id_cliente) REFERENCES Clientes(idClientes)
+) ENGINE = InnoDB;
+
+-- Tabla para registrar errores
+CREATE TABLE Errores (
+  idError INT AUTO_INCREMENT PRIMARY KEY,
+  id_cliente INT,
+  modulo VARCHAR(50) NOT NULL,
+  error TEXT NOT NULL,
+  fecha DATETIME NOT NULL
+) ENGINE = InnoDB;
+
+-- Datos iniciales
+INSERT INTO `Libro` (idLibro, Nombre, Editorial, Edicion, Estado, Cantidad, Precio) VALUES 
+(10, 'Harry Potter', 'ING', '1', 'NoStock', 0, 299.99),
+(11, 'El Quijote', 'Porrua', '5', 'Stock', 200, 199.50),
+(12, '11 Minutos', 'Paulo Cohelo', '11', 'Stock', 50, 159.75);
+
+INSERT INTO `Administradores` (Usuario, Contrasena, Nombre, Apellido) VALUES 
+("btoadmin", "cisco123", "Alberto", "Aguirre"),
+("admin", "cisco123", "Alexis", "Sanchez");
+
+-- Procedimientos almacenados
+DELIMITER $$
+
+CREATE PROCEDURE AgregarLibro(
+    IN p_nombre VARCHAR(45),
+    IN p_editorial VARCHAR(45),
+    IN p_edicion VARCHAR(45),
+    IN p_estado VARCHAR(45),
+    IN p_cantidad INT,
+    IN p_precio DECIMAL(10,2)
+)
+BEGIN
+    INSERT INTO Libro (Nombre, Editorial, Edicion, Estado, Cantidad, Precio)
+    VALUES (p_nombre, p_editorial, p_edicion, p_estado, p_cantidad, p_precio);
+END$$
+
+CREATE PROCEDURE ObtenerLibros()
+BEGIN
+    SELECT * FROM Libro;
+END$$
+
+CREATE PROCEDURE EditarLibro(
+    IN p_id INT,
+    IN p_nombre VARCHAR(45),
+    IN p_editorial VARCHAR(45),
+    IN p_edicion VARCHAR(45),
+    IN p_estado VARCHAR(45),
+    IN p_cantidad INT,
+    IN p_precio DECIMAL(10,2)
+)
+BEGIN
+    UPDATE Libro
+    SET Nombre = p_nombre, Editorial = p_editorial, Edicion = p_edicion, 
+        Estado = p_estado, Cantidad = p_cantidad, Precio = p_precio
+    WHERE idLibro = p_id;
+END$$
+
+CREATE PROCEDURE EliminarLibro(IN p_id INT)
+BEGIN
+    DELETE FROM Libro WHERE idLibro = p_id;
+END$$
+
+DELIMITER ;
+
+-- Restaurar configuraciones originales
+SET SQL_MODE=@OLD_SQL_MODE;
+SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
+SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
