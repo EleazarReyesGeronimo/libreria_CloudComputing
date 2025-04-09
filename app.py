@@ -10,18 +10,33 @@ from datetime import datetime, timedelta
 from datetime import datetime
 import uuid
 import hashlib
+from fpdf import FPDF
+import yaml
+from functools import lru_cache
+from flask_wtf import FlaskForm
+from wtforms import StringField, BooleanField, SubmitField
+from wtforms.validators import DataRequired, URL
+
 
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'  # Necesario para usar sesiones
 
-# Configuración de Flask-Mail
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'  # Servidor SMTP de Gmail
-app.config['MAIL_PORT'] = 587  # Puerto para TLS
-app.config['MAIL_USE_TLS'] = True  # Usar TLS
-app.config['MAIL_USERNAME'] = '20203tn110@utez.edu.mx'  # Tu correo electrónico
-app.config['MAIL_PASSWORD'] = 'Sanandres200245'  # Tu contraseña de correo
-app.config['MAIL_DEFAULT_SENDER'] = '20203tn110@utez.edu.mx'  # Correo remitente
+class MenuForm(FlaskForm):
+    name = StringField('Nombre', validators=[DataRequired()])
+    url = StringField('URL', validators=[DataRequired(), URL()])
+    icon = StringField('Icono (clase Bootstrap Icons)')
+    visible = BooleanField('Visible')
+    admin_only = BooleanField('Solo Admin')
+    submit = SubmitField('Guardar')
+
+# Configuración de Flask-Mail (asegúrate que esté correcta)
+app.config['MAIL_SERVER'] = 'smtp.gmail.com'
+app.config['MAIL_PORT'] = 587
+app.config['MAIL_USE_TLS'] = True
+app.config['MAIL_USERNAME'] = 'libreriautez@gmail.com'
+app.config['MAIL_PASSWORD'] = 'orud zsfq lktx ddvl'  # Usa la contraseña de aplicación correcta
+app.config['MAIL_DEFAULT_SENDER'] = 'libreriautez@gmail.com'
 
 mail = Mail(app)
 
@@ -105,9 +120,9 @@ def generate_dynamic_api_key(user_id):
 def get_db_connection():
     try:
         conn = mysql.connector.connect(
-            host='localhost',
-            user='root',  
-            password='root',  
+            host='libreria-db.cbnjujzklewo.us-east-1.rds.amazonaws.com',
+            user='admin_libreria',  
+            password='libreria123',  
             database='Libreria',
             port=3306  # Asegúrate de que es el puerto correcto
         )
@@ -115,6 +130,63 @@ def get_db_connection():
     except mysql.connector.Error as err:
         print(f"Error al conectar a la base de datos: {err}")
         return None
+#Enviar correo de confirmacion al realizar la compra
+def enviar_correo_confirmacion(cliente, libros, total, transaction_id):
+    try:
+        # Crear el cuerpo del correo
+        subject = f"Confirmación de compra - Pedido #{transaction_id}"
+        
+        # Crear contenido HTML para el correo
+        html_body = f"""
+        <html>
+            <body>
+                <h2>¡Gracias por tu compra, {cliente['Nombre']}!</h2>
+                <p>Tu pedido ha sido procesado exitosamente.</p>
+                
+                <h3>Detalles del pedido:</h3>
+                <p><strong>Número de pedido:</strong> {transaction_id}</p>
+                <p><strong>Fecha:</strong> {datetime.now().strftime('%d/%m/%Y %H:%M')}</p>
+                <p><strong>Total:</strong> ${total:.2f} MXN</p>
+                
+                <h3>Productos:</h3>
+                <table border="1" cellpadding="5" cellspacing="0">
+                    <tr>
+                        <th>Libro</th>
+                        <th>Cantidad</th>
+                        <th>Precio unitario</th>
+                        <th>Subtotal</th>
+                    </tr>
+                    {"".join(
+                        f"<tr><td>{libro['Nombre']}</td><td>{libro['Cantidad']}</td>"
+                        f"<td>${libro['Precio']:.2f}</td><td>${libro['Cantidad'] * libro['Precio']:.2f}</td></tr>"
+                        for libro in libros
+                    )}
+                </table>
+                
+                <h3>Información de envío:</h3>
+                <p>{cliente['Nombre']} {cliente['Apellidos']}</p>
+                <p>{cliente['Calle']} {cliente['NumExterior']}</p>
+                <p>{cliente['Colonia']}, CP {cliente['CP']}</p>
+                
+                <p>Si tienes alguna pregunta, no dudes en contactarnos.</p>
+                <p>Atentamente,<br>El equipo de Librería UTEZ</p>
+            </body>
+        </html>
+        """
+        
+        # Crear el mensaje
+        msg = Message(
+            subject=subject,
+            recipients=[cliente['Email']],
+            html=html_body
+        )
+        
+        # Enviar el correo
+        mail.send(msg)
+        return True
+    except Exception as e:
+        app.logger.error(f"Error al enviar correo: {str(e)}")
+        return False
 
 # Endpoint para obtener la ubicación por IP
 @app.route('/get_location')
@@ -123,7 +195,7 @@ def get_location():
     # client_ip = request.remote_addr
     
     # Para pruebas, usamos la IP de prueba configurada
-    client_ip = TEST_IP
+    client_ip = TEST_IP 
     
     location = get_location_from_ip(client_ip)
     return jsonify(location)
@@ -160,6 +232,7 @@ def regenerar_api_key():
         return jsonify({"message": "API_KEY regenerada exitosamente", "api_key": new_api_key})
 
     return jsonify({"error": "No autorizado"}), 401
+
 
 # Página de inicio de sesión
 @app.route('/login', methods=['GET', 'POST'])
@@ -850,52 +923,45 @@ def agregar_al_carrito(id_libro):
         conn = get_db_connection()
         cursor = conn.cursor(dictionary=True)
 
-        # 1. Verificar existencia y precio actual del libro
-        cursor.execute('''
-            SELECT Precio, Cantidad FROM Libro 
-            WHERE idLibro = %s AND Estado = "Stock"
-        ''', (id_libro,))
+        # 1. Verificar stock disponible
+        cursor.execute('SELECT Cantidad, Estado FROM Libro WHERE idLibro = %s', (id_libro,))
         libro = cursor.fetchone()
-
-        if not libro:
-            flash('El libro no está disponible', 'danger')
+        
+        if not libro or libro['Estado'] == 'NoStock':
+            flash('Este libro no está disponible actualmente', 'danger')
             return redirect(url_for('catalogo'))
 
-        # 2. Verificar stock suficiente
-        if libro['Cantidad'] < cantidad:
-            flash('No hay suficiente stock disponible', 'warning')
-            return redirect(url_for('catalogo'))
-
-        # 3. Verificar si ya está en el carrito
-        cursor.execute('''
-            SELECT idCarrito, Cantidad FROM Carrito 
-            WHERE idCliente = %s AND idLibro = %s
-        ''', (id_cliente, id_libro))
+        # 2. Verificar si ya está en el carrito
+        cursor.execute('SELECT Cantidad FROM Carrito WHERE idCliente = %s AND idLibro = %s', (id_cliente, id_libro))
         item = cursor.fetchone()
+        
+        cantidad_total = cantidad + (item['Cantidad'] if item else 0)
+        
+        if cantidad_total > libro['Cantidad']:
+            flash(f'No hay suficiente stock. Disponible: {libro["Cantidad"]}', 'warning')
+            return redirect(url_for('catalogo'))
 
+        # 3. Agregar/actualizar en carrito
         if item:
-            # Actualizar cantidad y precio (por si cambió)
-            nueva_cantidad = item['Cantidad'] + cantidad
             cursor.execute('''
                 UPDATE Carrito 
-                SET Cantidad = %s, Precio = %s 
-                WHERE idCarrito = %s
-            ''', (nueva_cantidad, libro['Precio'], item['idCarrito']))
+                SET Cantidad = %s 
+                WHERE idCliente = %s AND idLibro = %s
+            ''', (cantidad_total, id_cliente, id_libro))
         else:
-            # Insertar nuevo item con precio actual
             cursor.execute('''
                 INSERT INTO Carrito (idCliente, idLibro, Cantidad, Precio)
-                VALUES (%s, %s, %s, %s)
-            ''', (id_cliente, id_libro, cantidad, libro['Precio']))
+                SELECT %s, %s, %s, Precio FROM Libro WHERE idLibro = %s
+            ''', (id_cliente, id_libro, cantidad, id_libro))
 
         conn.commit()
-        flash('Libro agregado al carrito correctamente', 'success')
+        flash('Libro agregado al carrito', 'success')
 
     except ValueError:
         flash('Cantidad inválida', 'danger')
     except Exception as e:
         conn.rollback()
-        flash(f'Error al agregar al carrito: {str(e)}', 'danger')
+        flash(f'Error: {str(e)}', 'danger')
     finally:
         cursor.close()
         conn.close()
@@ -909,27 +975,28 @@ def ver_carrito():
         return redirect(url_for('login_cliente'))
 
     id_cliente = session.get('id_cliente')
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # Obtener los libros en el carrito con su ID, nombre, cantidad y precio
+    # Asegúrate de que esta consulta devuelve los datos correctamente
     cursor.execute('''
-        SELECT l.idLibro, l.Nombre, c.Cantidad, l.Precio 
+        SELECT l.idLibro, l.Nombre, c.Cantidad, l.Precio, l.Cantidad as StockDisponible
         FROM Carrito c 
         JOIN Libro l ON c.idLibro = l.idLibro 
         WHERE c.idCliente = %s
     ''', (id_cliente,))
-    libros = cursor.fetchall()
-
-    # Calcular el total de la compra
+    
+    libros = cursor.fetchall()  # Esta línea es crucial
     total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
 
     cursor.close()
     conn.close()
 
-    return render_template('carrito.html', libros=libros, total=total)
+    # Debug: Verifica qué estás pasando al template
+    print("Libros en carrito:", libros)
+    print("Total calculado:", total)
 
+    return render_template('carrito.html', libros=libros, total=total)
 ####
 
 @app.route('/eliminar_del_carrito/<int:id_libro>', methods=['POST'])
@@ -959,10 +1026,10 @@ def actualizar_carrito(id_libro):
         return redirect(url_for('login_cliente'))
 
     try:
-        cantidad = int(request.form['cantidad'])
+        nueva_cantidad = int(request.form['cantidad'])
         id_cliente = session.get('id_cliente')
 
-        if cantidad <= 0:
+        if nueva_cantidad <= 0:
             flash('La cantidad debe ser mayor a cero', 'danger')
             return redirect(url_for('ver_carrito'))
 
@@ -970,86 +1037,109 @@ def actualizar_carrito(id_libro):
         cursor = conn.cursor(dictionary=True)
 
         # 1. Verificar stock disponible
-        cursor.execute('''
-            SELECT Cantidad FROM Libro 
-            WHERE idLibro = %s AND Estado = "Stock"
-        ''', (id_libro,))
-        libro = cursor.fetchone()
-
-        if not libro or libro['Cantidad'] < cantidad:
-            flash('No hay suficiente stock disponible', 'warning')
+        cursor.execute('SELECT Cantidad FROM Libro WHERE idLibro = %s', (id_libro,))
+        stock_disponible = cursor.fetchone()['Cantidad']
+        
+        if nueva_cantidad > stock_disponible:
+            flash(f'No hay suficiente stock. Disponible: {stock_disponible}', 'warning')
             return redirect(url_for('ver_carrito'))
 
-        # 2. Obtener precio actual
-        cursor.execute('SELECT Precio FROM Libro WHERE idLibro = %s', (id_libro,))
-        precio_actual = cursor.fetchone()['Precio']
-
-        # 3. Actualizar carrito con cantidad y precio actualizado
+        # 2. Actualizar carrito
         cursor.execute('''
             UPDATE Carrito 
-            SET Cantidad = %s, Precio = %s
+            SET Cantidad = %s 
             WHERE idCliente = %s AND idLibro = %s
-        ''', (cantidad, precio_actual, id_cliente, id_libro))
+        ''', (nueva_cantidad, id_cliente, id_libro))
 
         conn.commit()
-        flash('Cantidad actualizada correctamente', 'success')
+        flash('Cantidad actualizada', 'success')
 
     except ValueError:
         flash('Cantidad inválida', 'danger')
     except Exception as e:
         conn.rollback()
-        flash(f'Error al actualizar: {str(e)}', 'danger')
+        flash(f'Error: {str(e)}', 'danger')
     finally:
         cursor.close()
         conn.close()
 
     return redirect(url_for('ver_carrito'))
 #####
+# Configuración PayPal (al inicio del archivo)
+PAYPAL_EMAIL = "sb-7whvk39219925@business.example.com"  # Email de tu cuenta Sandbox Business
+PAYPAL_SANDBOX = True  # Cambiar a False en producción
+
+# Ruta para comprar carrito (simplificada)
 @app.route('/comprar_carrito', methods=['POST'])
 def comprar_carrito():
+    """Prepara los datos para PayPal (ahora manejado directamente desde el formulario en carrito.html)"""
+    if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
+        return redirect(url_for('login_cliente'))
+
+    # Esta lógica ahora se maneja en el frontend y PayPal
+    # Solo redirigimos si hay algún problema
+    flash('Por favor usa el botón de PayPal para completar tu compra', 'info')
+    return redirect(url_for('ver_carrito'))
+
+# Ruta para compra exitosa    
+@app.route('/compra_exitosa')
+def compra_exitosa():
+    """Maneja la respuesta exitosa de PayPal y envía correo de confirmación"""
+    # Verificar si es un retorno exitoso
+    if request.args.get('success') != 'true':
+        flash('No se recibió confirmación de pago', 'danger')
+        return redirect(url_for('ver_carrito'))
+
+    # Obtener parámetros de PayPal
+    transaction_id = request.args.get('tx') or request.args.get('transaction_id')
+    payment_amount = request.args.get('amt') or request.args.get('payment_amount')
+    currency = request.args.get('cc') or request.args.get('currency_code')
+    
+    if not transaction_id:
+        # Generar un ID temporal si no viene de PayPal
+        transaction_id = str(uuid.uuid4())
+        flash('Advertencia: No se recibió ID de transacción de PayPal. Se generó uno temporal.', 'warning')
+
+    # Obtener datos del cliente
     if 'usuario' not in session or session.get('tipo_usuario') != 'cliente':
         return redirect(url_for('login_cliente'))
 
     id_cliente = session.get('id_cliente')
-
     conn = get_db_connection()
     cursor = conn.cursor(dictionary=True)
 
-    # 1. VALIDAR CARRITO VACÍO
-    cursor.execute('SELECT COUNT(*) as total_items FROM Carrito WHERE idCliente = %s', (id_cliente,))
-    if cursor.fetchone()['total_items'] == 0:
-        flash('No hay artículos en el carrito para comprar', 'warning')
-        return redirect(url_for('ver_carrito'))
-
-    # 2. OBTENER DATOS DEL CLIENTE
-    cursor.execute('SELECT Email, Nombre FROM Clientes WHERE idClientes = %s', (id_cliente,))
-    cliente = cursor.fetchone()
-    if not cliente:
-        flash('Error al obtener datos del cliente', 'danger')
-        return redirect(url_for('ver_carrito'))
-
-    # 3. OBTENER PRODUCTOS CON PRECIO ACTUAL (IMPORTANTE)
-    cursor.execute('''
-        SELECT l.idLibro, l.Nombre, c.Cantidad, l.Precio 
-        FROM Carrito c 
-        JOIN Libro l ON c.idLibro = l.idLibro 
-        WHERE c.idCliente = %s
-    ''', (id_cliente,))
-    libros = cursor.fetchall()
-
-    # 4. CALCULAR TOTAL CORRECTO
-    total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
-
-    # 5. REGISTRAR VENTAS Y ACTUALIZAR INVENTARIO
     try:
-        for libro in libros:
-            # Registrar venta
-            cursor.execute('''
-                INSERT INTO Ventas (Fecha, Monto, TipoPago, ID_libro, IDClientes)
-                VALUES (NOW(), %s, 'Online', %s, %s)
-            ''', (libro['Precio'] * libro['Cantidad'], libro['idLibro'], id_cliente))
+        # 1. Obtener items del carrito
+        cursor.execute('''
+            SELECT c.idLibro, l.Nombre, c.Cantidad, l.Precio, l.Editorial
+            FROM Carrito c 
+            JOIN Libro l ON c.idLibro = l.idLibro 
+            WHERE c.idCliente = %s
+        ''', (id_cliente,))
+        libros = cursor.fetchall()
 
-            # Actualizar stock
+        if not libros:
+            flash('No hay items en el carrito', 'warning')
+            return redirect(url_for('ver_carrito'))
+
+        # 2. Calcular total
+        total = sum(libro['Cantidad'] * libro['Precio'] for libro in libros)
+
+        # 3. Registrar cada libro vendido
+        for libro in libros:
+            cursor.execute('''
+                INSERT INTO Ventas (
+                    Fecha, ID_libro, IDClientes, Cantidad, 
+                    PrecioUnitario, Total, MetodoPago, TransactionID, Estado
+                ) VALUES (
+                    NOW(), %s, %s, %s, %s, %s, 'PayPal', %s, 'Completado'
+                )
+            ''', (
+                libro['idLibro'], id_cliente, libro['Cantidad'],
+                libro['Precio'], libro['Cantidad'] * libro['Precio'], transaction_id
+            ))
+
+            # Actualizar inventario
             cursor.execute('''
                 UPDATE Libro 
                 SET Cantidad = Cantidad - %s,
@@ -1057,34 +1147,163 @@ def comprar_carrito():
                 WHERE idLibro = %s
             ''', (libro['Cantidad'], libro['Cantidad'], libro['idLibro']))
 
-        # 6. ENVIAR CORREO CON DATOS CORRECTOS
-        mensaje = f"Gracias por tu compra, {cliente['Nombre']}!\n\nDetalles:\n"
-        mensaje += "\n".join([
-            f"- {libro['Nombre']} ({libro['Cantidad']} x ${libro['Precio']:.2f})"
-            for libro in libros
-        ])
-        mensaje += f"\n\nTOTAL: ${total:.2f}"
-
-        msg = Message(
-            "Confirmación de compra",
-            recipients=[cliente['Email']],
-            body=mensaje
-        )
-        mail.send(msg)
-
-        # 7. VACIAR CARRITO
+        # 4. Vaciar carrito
         cursor.execute('DELETE FROM Carrito WHERE idCliente = %s', (id_cliente,))
+        
+        # 5. Registrar transacción PayPal
+        cursor.execute('''
+            INSERT INTO TransaccionesPayPal (
+                transaction_id, id_cliente, monto, moneda, estado, fecha
+            ) VALUES (
+                %s, %s, %s, %s, 'Completado', NOW()
+            )
+        ''', (transaction_id, id_cliente, payment_amount or total, currency or 'MXN'))
+
+        # 6. Obtener datos completos del cliente para el correo
+        cursor.execute('''
+            SELECT c.*, d.Calle, d.NumExterior, d.Colonia, d.CP, d.NumContacto
+            FROM Clientes c
+            JOIN Direcciones d ON c.IDireccion = d.idDirecciones
+            WHERE c.idClientes = %s
+        ''', (id_cliente,))
+        cliente_data = cursor.fetchone()
+
         conn.commit()
 
-        flash('Compra exitosa! Se envió la confirmación por correo', 'success')
-        
+        # 7. Enviar correo de confirmación
+        try:
+            # Crear el cuerpo del correo
+            subject = f"Confirmación de compra - Pedido #{transaction_id}"
+            
+            # Crear contenido HTML para el correo
+            html_body = render_template(
+                'email_confirmacion.html',
+                cliente=cliente_data,
+                libros=libros,
+                total=total,
+                transaction_id=transaction_id,
+                fecha=datetime.now().strftime('%d/%m/%Y %H:%M')
+            )
+            
+            # Crear el mensaje
+            msg = Message(
+                subject=subject,
+                recipients=[cliente_data['Email']],
+                html=html_body,
+                sender=app.config['MAIL_DEFAULT_SENDER']
+            )
+            
+            # Enviar el correo (en segundo plano para no bloquear la respuesta)
+            mail.send(msg)
+            app.logger.info(f"Correo de confirmación enviado a {cliente_data['Email']}")
+        except Exception as email_error:
+            app.logger.error(f"Error al enviar correo: {str(email_error)}")
+            # No fallar la compra solo por error de correo
+
+        return render_template('resumen_compra.html', 
+                            libros=libros,
+                            total=total,
+                            cliente=cliente_data,
+                            direccion=cliente_data,
+                            paypal_data={
+                                'transaction_id': transaction_id,
+                                'payment_amount': payment_amount or total,
+                                'currency': currency or 'MXN',
+                                'status': 'Completado'
+                            })
+
     except Exception as e:
         conn.rollback()
-        flash(f'Error al procesar la compra: {str(e)}', 'danger')
+        app.logger.error(f"Error en compra_exitosa: {str(e)}")
+        flash('Ocurrió un error al procesar tu compra', 'danger')
+        return redirect(url_for('ver_carrito'))
     finally:
         cursor.close()
         conn.close()
 
-    return redirect(url_for('ver_carrito'))
+# Ruta para IPN (Opcional pero recomendado)
+@app.route('/ipn_paypal', methods=['POST'])
+def ipn_paypal():
+    """Endpoint para verificación de pagos con IPN"""
+    # Implementar lógica de verificación IPN para producción
+    # Esto es importante para verificar que los pagos son reales
+    return '', 200
+
+@lru_cache(maxsize=1)
+def load_menus():
+    try:
+        with open('menus.yaml', 'r', encoding='utf-8') as file:
+            menu_data = yaml.safe_load(file)
+            return menu_data.get('menus', [])
+    except FileNotFoundError:
+        return []
+    except yaml.YAMLError as e:
+        app.logger.error(f"Error al cargar menus.yaml: {e}")
+        return []
+
+@app.context_processor
+def inject_menus():
+    menus = load_menus()
+    filtered_menus = []
+    for menu in menus:
+        if menu.get('visible', True):
+            if menu.get('admin_only', False):
+                if 'usuario' in session and session.get('tipo_usuario') == 'admin':
+                    filtered_menus.append(menu)
+            else:
+                filtered_menus.append(menu)
+    return dict(global_menus=filtered_menus)
+
+@app.route('/admin/menus', methods=['GET', 'POST'])
+def admin_menus():
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
+
+    form = MenuForm()
+    menus = load_menus()
+
+    if form.validate_on_submit():
+        new_menu = {
+            'name': form.name.data,
+            'url': form.url.data,
+            'icon': form.icon.data or 'bi-link',
+            'visible': form.visible.data,
+            'admin_only': form.admin_only.data
+        }
+        menus.append(new_menu)
+        
+        try:
+            with open('menus.yaml', 'w', encoding='utf-8') as file:
+                yaml.dump({'menus': menus}, file, allow_unicode=True)
+            load_menus.cache_clear()
+            flash('Menú actualizado correctamente', 'success')
+        except Exception as e:
+            app.logger.error(f"Error al guardar menus.yaml: {e}")
+            flash('Error al guardar los cambios', 'danger')
+
+        return redirect(url_for('admin_menus'))
+
+    return render_template('admin_menus.html', menus=menus, form=form)
+
+@app.route('/admin/menus/delete/<int:index>', methods=['POST'])
+def delete_menu(index):
+    if 'usuario' not in session or session.get('tipo_usuario') != 'admin':
+        return redirect(url_for('login'))
+
+    menus = load_menus()
+    if 0 <= index < len(menus):
+        deleted_name = menus[index]['name']
+        del menus[index]
+        
+        try:
+            with open('menus.yaml', 'w', encoding='utf-8') as file:
+                yaml.dump({'menus': menus}, file, allow_unicode=True)
+            load_menus.cache_clear()
+            flash(f'Menú "{deleted_name}" eliminado', 'success')
+        except Exception as e:
+            app.logger.error(f"Error al guardar menus.yaml: {e}")
+            flash('Error al eliminar el menú', 'danger')
+
+    return redirect(url_for('admin_menus'))
 if __name__ == '__main__':
     app.run(debug=True)

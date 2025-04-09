@@ -1,213 +1,187 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Librería Literaria</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <style>
-        :root {
-            --primary-color: #8b4513;       /* Marrón como madera */
-            --secondary-color: #654321;     /* Marrón más oscuro */
-            --accent-color: #c19a6b;        /* Beige como papel antiguo */
-            --light-color: #f5f5dc;         /* Beige claro como páginas de libro */
-            --dark-color: #2c2416;          /* Marrón muy oscuro */
-            --text-color: #4a3c2a;          /* Color texto café oscuro */
-        }
-        
-        body {
-            background-color: var(--light-color);
-            font-family: 'Palatino Linotype', 'Book Antiqua', Palatino, serif;
-            height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            background-image: url('https://cdnjs.cloudflare.com/ajax/libs/ant-design-icons/4.7.0/png/outline/book.png'), linear-gradient(rgba(245, 245, 220, 0.7), rgba(245, 245, 220, 0.9));
-            background-position: center;
-            background-repeat: repeat;
-            background-blend-mode: overlay;
-        }
-        
+{% extends "base.html" %}
+
+{% block title %}Librería Literaria{% endblock %}
+
+{% block extra_css %}
+<style>
+    .welcome-container {
+        background-color: white;
+        border-radius: 5px;
+        box-shadow: 0 5px 15px rgba(139, 69, 19, 0.3);
+        padding: 40px;
+        text-align: center;
+        max-width: 600px;
+        width: 100%;
+        background-color: #fffaf0;
+        border: 1px solid var(--accent-color);
+        position: relative;
+        margin: 2rem auto;
+    }
+    
+    .welcome-container::before {
+        content: "";
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        border: 1px solid var(--accent-color);
+        opacity: 0.5;
+        pointer-events: none;
+    }
+    
+    .welcome-header {
+        margin-bottom: 30px;
+    }
+    
+    .welcome-header h1 {
+        color: var(--primary-color);
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        font-weight: bold;
+        text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
+        font-family: 'Bookman Old Style', Georgia, serif;
+    }
+    
+    .welcome-header p {
+        color: var(--text-color);
+        font-size: 1.1rem;
+        font-style: italic;
+    }
+    
+    .btn-container {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        margin-top: 30px;
+    }
+    
+    .btn-primary {
+        background-color: var(--primary-color);
+        border-color: var(--primary-color);
+        padding: 12px 20px;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    }
+    
+    .btn-primary:hover {
+        background-color: var(--secondary-color);
+        border-color: var(--secondary-color);
+        transform: translateY(-2px);
+    }
+    
+    .btn-outline-primary {
+        color: var(--primary-color);
+        border-color: var(--primary-color);
+        padding: 12px 20px;
+        font-size: 1.1rem;
+        transition: all 0.3s ease;
+    }
+    
+    .btn-outline-primary:hover {
+        background-color: var(--primary-color);
+        color: white;
+        transform: translateY(-2px);
+    }
+    
+    .logo-container {
+        margin-bottom: 30px;
+        position: relative;
+    }
+    
+    .logo-container i {
+        font-size: 5rem;
+        color: var(--primary-color);
+    }
+    
+    .logo-container::after {
+        content: "📚";
+        position: absolute;
+        font-size: 2rem;
+        top: -5px;
+        right: 35%;
+        opacity: 0.7;
+    }
+    
+    .divider {
+        margin: 25px 0;
+        text-align: center;
+        position: relative;
+    }
+    
+    .divider::before {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 0;
+        right: 0;
+        height: 1px;
+        background-color: var(--accent-color);
+        z-index: 1;
+    }
+    
+    .divider span {
+        background-color: #fffaf0;
+        padding: 0 15px;
+        position: relative;
+        z-index: 2;
+        color: var(--text-color);
+        font-style: italic;
+    }
+    
+    .footer-text {
+        margin-top: 30px;
+        font-size: 0.9rem;
+        color: var(--text-color);
+        border-top: 1px dashed var(--accent-color);
+        padding-top: 15px;
+        font-style: italic;
+    }
+    
+    @media (max-width: 576px) {
         .welcome-container {
-            background-color: white;
-            border-radius: 5px;
-            box-shadow: 0 5px 15px rgba(139, 69, 19, 0.3);
-            padding: 40px;
-            text-align: center;
-            max-width: 600px;
-            width: 100%;
-            background-color: #fffaf0;
-            border: 1px solid var(--accent-color);
-            position: relative;
-        }
-        
-        .welcome-container::before {
-            content: "";
-            position: absolute;
-            top: 10px;
-            left: 10px;
-            right: 10px;
-            bottom: 10px;
-            border: 1px solid var(--accent-color);
-            opacity: 0.5;
-            pointer-events: none;
-        }
-        
-        .welcome-header {
-            margin-bottom: 30px;
+            padding: 30px 20px;
         }
         
         .welcome-header h1 {
-            color: var(--primary-color);
-            font-size: 2.5rem;
-            margin-bottom: 10px;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.1);
-            font-family: 'Bookman Old Style', Georgia, serif;
-        }
-        
-        .welcome-header p {
-            color: var(--text-color);
-            font-size: 1.1rem;
-            font-style: italic;
-        }
-        
-        .btn-container {
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-            margin-top: 30px;
-        }
-        
-        .btn-primary {
-            background-color: var(--primary-color);
-            border-color: var(--primary-color);
-            padding: 12px 20px;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .btn-primary:hover {
-            background-color: var(--secondary-color);
-            border-color: var(--secondary-color);
-            transform: translateY(-2px);
-        }
-        
-        .btn-outline-primary {
-            color: var(--primary-color);
-            border-color: var(--primary-color);
-            padding: 12px 20px;
-            font-size: 1.1rem;
-            transition: all 0.3s ease;
-        }
-        
-        .btn-outline-primary:hover {
-            background-color: var(--primary-color);
-            color: white;
-            transform: translateY(-2px);
-        }
-        
-        .logo-container {
-            margin-bottom: 30px;
-            position: relative;
-        }
-        
-        .logo-container i {
-            font-size: 5rem;
-            color: var(--primary-color);
-        }
-        
-        .logo-container::after {
-            content: "📚";
-            position: absolute;
             font-size: 2rem;
-            top: -5px;
-            right: 35%;
-            opacity: 0.7;
         }
-        
-        .divider {
-            margin: 25px 0;
-            text-align: center;
-            position: relative;
-        }
-        
-        .divider::before {
-            content: "";
-            position: absolute;
-            top: 50%;
-            left: 0;
-            right: 0;
-            height: 1px;
-            background-color: var(--accent-color);
-            z-index: 1;
-        }
-        
-        .divider span {
-            background-color: #fffaf0;
-            padding: 0 15px;
-            position: relative;
-            z-index: 2;
-            color: var(--text-color);
-            font-style: italic;
-        }
-        
-        .footer-text {
-            margin-top: 30px;
-            font-size: 0.9rem;
-            color: var(--text-color);
-            border-top: 1px dashed var(--accent-color);
-            padding-top: 15px;
-            font-style: italic;
-        }
-        
-        @media (max-width: 576px) {
-            .welcome-container {
-                padding: 30px 20px;
-            }
-            
-            .welcome-header h1 {
-                font-size: 2rem;
-            }
-        }
-    </style>
-</head>
-<body>
-    <div class="welcome-container">
-        <div class="logo-container">
-            <i class="fas fa-book-open"></i>
-        </div>
-        
-        <div class="welcome-header">
-            <h1>Bienvenido a la Librería</h1>
-            <p>Tu destino para descubrir historias que transforman vidas</p>
-        </div>
-        
-        <div class="btn-container">
-            <a href="{{ url_for('login_cliente') }}" class="btn btn-primary">
-                <i class="fas fa-sign-in-alt me-2"></i>Iniciar sesión como lector
-            </a>
-            
-            <a href="{{ url_for('crear_cuenta') }}" class="btn btn-outline-primary">
-                <i class="fas fa-user-plus me-2"></i>Unirse a nuestra comunidad
-            </a>
-        </div>
-        
-        <div class="divider">
-            <span>o</span>
-        </div>
-        
-        <div class="btn-container">
-            <a href="{{ url_for('login') }}" class="btn btn-outline-primary">
-                <i class="fas fa-user-shield me-2"></i>Acceso para bibliotecarios
-            </a>
-        </div>
-        
-        <p class="footer-text">"Un libro es un sueño que tienes en tus manos" — Neil Gaiman</p>
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="welcome-container">
+    <div class="logo-container">
+        <i class="fas fa-book-open"></i>
     </div>
     
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-</body>
-</html>
+    <div class="welcome-header">
+        <h1>Bienvenido a la Librería</h1>
+        <p>Tu destino para descubrir historias que transforman vidas</p>
+    </div>
+    
+    <div class="btn-container">
+        <a href="{{ url_for('login_cliente') }}" class="btn btn-primary">
+            <i class="fas fa-sign-in-alt me-2"></i>Iniciar sesión como lector
+        </a>
+        
+        <a href="{{ url_for('crear_cuenta') }}" class="btn btn-outline-primary">
+            <i class="fas fa-user-plus me-2"></i>Unirse a nuestra comunidad
+        </a>
+    </div>
+    
+    <div class="divider">
+        <span>o</span>
+    </div>
+    
+    <div class="btn-container">
+        <a href="{{ url_for('login') }}" class="btn btn-outline-primary">
+            <i class="fas fa-user-shield me-2"></i>Acceso para bibliotecarios
+        </a>
+    </div>
+    
+    <p class="footer-text">"Un libro es un sueño que tienes en tus manos" — Neil Gaiman</p>
+</div>
+{% endblock %}
